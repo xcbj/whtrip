@@ -604,21 +604,61 @@
     li.classList.toggle('open', open);
   }
 
+  /* 播放路线动图。
+     在线：直接给 <video> 地址，边下边播最快。
+     断网（飞行模式）：iOS Safari 的媒体栈有时不走 Service Worker，
+       所以这里改成用 fetch() 把整段 mp4 取回来（SW 会命中缓存）转成 blob: 再播，
+       这条路径一定经过 SW/内存，飞行模式下也能播。 */
   function playVideo(btn) {
     var wrap = btn.parentNode;
     var v = $('video', wrap);
     if (!v) return;
     var id = btn.dataset.play;
-    if (!v.getAttribute('src')) v.setAttribute('src', videoSrc('mp4/' + id + '.mp4'));
+    var key = 'mp4/' + id + '.mp4';
+
     v.muted = true;
     v.setAttribute('playsinline', '');
-    var p = v.play();
-    if (p && p.catch) p.catch(function () { toast('这个视频播放不了，可以点下面「保存视频」'); });
     btn.hidden = true;
-    v.addEventListener('pause', function () {
-      if (v.ended) btn.hidden = false;
-    });
-    v.addEventListener('ended', function () { btn.hidden = false; });
+
+    function start() {
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {
+        btn.hidden = false;
+        toast('这段动图还没存到手机上：先联网打开本页一次（约 3MB），之后断网也能看');
+      });
+    }
+
+    function fromBlob() {
+      if (blobCache[key]) { v.setAttribute('src', blobCache[key]); start(); return; }
+      btn.hidden = true;
+      fetch(asset(key)).then(function (r) {
+        if (!r.ok) throw new Error('http ' + r.status);
+        return r.blob();
+      }).then(function (b) {
+        blobCache[key] = URL.createObjectURL(b);
+        v.setAttribute('src', blobCache[key]);
+        start();
+      }).catch(function () {
+        btn.hidden = false;
+        toast('这段动图还没存到手机上：先联网打开本页一次（约 3MB），之后断网也能看');
+      });
+    }
+
+    if (!v._wired) {
+      v._wired = true;
+      v.addEventListener('pause', function () { if (v.ended) btn.hidden = false; });
+      v.addEventListener('ended', function () { btn.hidden = false; });
+      // 在线直接播放失败（比如刚断网）→ 退到 blob 路径再试一次
+      v.addEventListener('error', function () {
+        if (!v._retried) { v._retried = true; fromBlob(); }
+      });
+    }
+
+    if (B64[key]) { v.setAttribute('src', videoSrc(key)); start(); return; }
+    if (blobCache[key]) { v.setAttribute('src', blobCache[key]); start(); return; }
+    if (navigator.onLine === false) { fromBlob(); return; }
+    v.setAttribute('src', asset(key));
+    start();
   }
 
   document.addEventListener('click', function (e) {
