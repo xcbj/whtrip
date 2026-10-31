@@ -1,0 +1,15 @@
+{
+  "items": [
+    "d1",
+    "d2",
+    "d3",
+    "d4",
+    "rain",
+    "all"
+  ],
+  "offlineTier": "main",
+  "reason": "主档合计 <= 4MB，离线单文件直接复用主档",
+  "mainMB": 2.08,
+  "liteMB": 1.45,
+  "maxMainKB": 757
+}

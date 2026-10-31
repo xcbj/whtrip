@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="武汉攻略">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1114">
+<title>武汉四天三晚亲子游 · 11.12—11.15</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="tb-main">
+    <h1>武汉 · 四天三晚</h1>
+    <span class="tb-sub" id="tbSub">2026.11.12—11.15</span>
+  </div>
+  <button class="today-btn" id="todayBtn" hidden>今日</button>
+</header>
+
+<!-- 行程页的日期分段控件（sticky，跟着 topbar 下面） -->
+<div class="daybar" id="daybar" data-for="plan">
+  <div class="daybar-scroll" id="daybarPlan"></div>
+</div>
+
+<main id="main">
+
+  <!-- ========== 行程 ========== -->
+  <section class="page" id="page-plan">
+    <details class="intro">
+      <summary>行程说明 · 交通/预约/动图怎么用</summary>
+      <div class="intro-body" id="introBody"></div>
+    </details>
+    <div id="dayPanels"></div>
+  </section>
+
+  <!-- ========== 动图 ========== -->
+  <section class="page" id="page-route" hidden>
+    <div class="daybar daybar-inline">
+      <div class="daybar-scroll" id="daybarRoute"></div>
+    </div>
+    <div id="routeBody"></div>
+  </section>
+
+  <!-- ========== 吃 ========== -->
+  <section class="page" id="page-eat" hidden>
+    <div id="eatBody"></div>
+  </section>
+
+  <!-- ========== 速查 ========== -->
+  <section class="page" id="page-shops" hidden>
+    <div class="searchwrap">
+      <input id="shopSearch" type="search" inputmode="search" placeholder="搜店名 / 用途 / 区域，如「湖锦」「过早」" autocomplete="off">
+    </div>
+    <div id="shopsBody"></div>
+  </section>
+
+  <!-- ========== 准备 ========== -->
+  <section class="page" id="page-prep" hidden>
+    <div id="prepBody"></div>
+  </section>
+
+</main>
+
+<nav class="tabbar" id="tabbar" role="tablist">
+  <button class="tab" data-page="plan" role="tab" aria-selected="true"><span class="ti">🗓</span><span class="tl">行程</span></button>
+  <button class="tab" data-page="route" role="tab" aria-selected="false"><span class="ti">🗺</span><span class="tl">动图</span></button>
+  <button class="tab" data-page="eat" role="tab" aria-selected="false"><span class="ti">🍜</span><span class="tl">吃</span></button>
+  <button class="tab" data-page="shops" role="tab" aria-selected="false"><span class="ti">🔍</span><span class="tl">速查</span></button>
+  <button class="tab" data-page="prep" role="tab" aria-selected="false"><span class="ti">🧳</span><span class="tl">准备</span></button>
+</nav>
+
+<div class="toast" id="toast" hidden></div>
+
+<noscript><p style="padding:20px">需要开启 JavaScript 才能看这份攻略。</p></noscript>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
