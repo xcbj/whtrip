@@ -231,7 +231,7 @@
     var posterKey = 'poster/' + id + '.jpg';
     var isAll = id === 'all';
     var extra = isAll
-      ? '<div class="vcard overview"><img src="' + esc(asset('img/overview.jpg')) + '" alt="四天路线总览" loading="lazy"></div>'
+      ? '<div class="vcard overview"><img src="' + esc(asset('img/overview.jpg')) + '" alt="四天路线总览" loading="lazy" data-zoom="1"></div>'
       : '';
 
     $('#routeBody').innerHTML =
@@ -239,6 +239,7 @@
         '<div class="vwrap">' +
           '<video poster="' + esc(asset(posterKey)) + '" preload="none" playsinline webkit-playsinline muted controlslist="nodownload" disablepictureinpicture></video>' +
           '<button class="vplay" data-play="' + id + '"><span class="pico">▶</span><span>播放路线动图 · 约 10 秒</span></button>' +
+          '<button class="vfull" data-full="' + id + '" aria-label="全屏放大">⤢</button>' +
         '</div>' +
         '<div class="vmeta"><b>' + esc(meta.title) + '</b><br>' + esc(meta.desc) + '</div>' +
         '<div class="vacts">' +
@@ -249,7 +250,7 @@
               '<a class="btn" href="' + esc(asset('gif/' + id + '.gif')) + '" download="武汉路线-' + id + '.gif">保存原动图 GIF</a>') +
         '</div>' +
       '</div>' + extra +
-      '<p class="hint" style="margin:12px 16px 20px">动图里每段都标了「地铁 2 号线 / 步行 / 轮渡」和耗时；看不清就横屏或双指放大（视频已在本地，不耗流量）。</p>';
+      '<p class="hint" style="margin:12px 16px 20px">动图里每段都标了「地铁 2 号线 / 步行 / 轮渡」和耗时；<b>看不清点画面右上角 ⤢ 全屏</b>，进去后还能双指放大、双击放大（视频已存本地，不耗流量）。</p>';
   }
 
   /* =========================================================
@@ -661,8 +662,207 @@
     start();
   }
 
+  /* =========================================================
+     全屏放大（路线动图 / 四天总览图）：点 ⤢ 进全屏，双指缩放 + 拖动
+     ========================================================= */
+  var lb = $('#lb'), lbStage = $('#lbStage'), lbVideo = $('#lbVideo'),
+      lbImg = $('#lbImg'), lbTabs = $('#lbTabs'), lbTip = $('#lbTip');
+  var lbId = null, view = { s: 1, tx: 0, ty: 0 }, gesture = null;
+  var LB_TABS = [['d1', 'D1'], ['d2', 'D2'], ['d3', 'D3'], ['d4', 'D4'], ['rain', '雨天'], ['all', '总览']];
+
+  function lbEl() { return lbId === 'img' ? lbImg : lbVideo; }
+
+  function lbApply() {
+    lbEl().style.transform = 'translate3d(' + view.tx + 'px,' + view.ty + 'px,0) scale(' + view.s + ')';
+  }
+
+  function lbReset() { view = { s: 1, tx: 0, ty: 0 }; lbApply(); }
+
+  function lbClamp() {
+    var el = lbEl();
+    var w = el.offsetWidth || 1, h = el.offsetHeight || 1;
+    var mx = Math.max(0, (view.s - 1) * w / 2);
+    var my = Math.max(0, (view.s - 1) * h / 2);
+    view.tx = Math.min(mx, Math.max(-mx, view.tx));
+    view.ty = Math.min(my, Math.max(-my, view.ty));
+  }
+
+  function lbBuildTabs() {
+    if (lbId === 'img') { lbTabs.innerHTML = ''; lbTabs.hidden = true; return; }
+    lbTabs.hidden = false;
+    lbTabs.innerHTML = LB_TABS.map(function (t) {
+      return '<button class="lb-tab" data-lbtab="' + t[0] + '" aria-selected="' + (t[0] === lbId) + '">' + t[1] + '</button>';
+    }).join('');
+  }
+
+  function lbLoad(id, keepTime) {
+    lbId = id;
+    var isImg = id === 'img';
+    lbVideo.hidden = isImg;
+    lbImg.hidden = !isImg;
+    if (isImg) {
+      lbImg.src = asset('img/overview.jpg');
+    } else {
+      var key = 'mp4/' + id + '.mp4';
+      var src = videoSrc(key); // 离线版这里是 blob:，在线版是 assets/ 路径
+      if (lbVideo.getAttribute('src') !== src) lbVideo.setAttribute('src', src);
+      try { lbVideo.currentTime = keepTime || 0; } catch (err) { }
+      var p = lbVideo.play();
+      if (p && p.catch) p.catch(function () { });
+    }
+    lbReset();
+    lbBuildTabs();
+  }
+
+  function openLB(id) {
+    var carry = 0;
+    var inline = $('.vwrap video');
+    if (id !== 'img' && inline) {
+      var sv = inline.getAttribute('src') || '';
+      if (sv.indexOf('/' + id + '.mp4') >= 0) carry = inline.currentTime || 0;
+    }
+    lb.hidden = false;
+    document.body.classList.add('lb-open');
+    lbLoad(id, carry);
+  }
+
+  function closeLB() {
+    try { lbVideo.pause(); } catch (err) { }
+    lb.hidden = true;
+    document.body.classList.remove('lb-open');
+    lbReset();
+    lbId = null;
+    gesture = null;
+  }
+
+  // 围绕某个屏幕点缩放（双击时以手指位置为锚点，放大后直接看到点到的地方）
+  function lbZoomTo(s, fx, fy) {
+    var c = stageCenter();
+    if (fx == null) { fx = c.x; fy = c.y; }
+    var k = s / view.s;
+    view.tx = (fx - c.x) - k * (fx - c.x - view.tx);
+    view.ty = (fy - c.y) - k * (fy - c.y - view.ty);
+    view.s = s;
+    lbClamp();
+    lbApply();
+  }
+
+  function stageCenter() {
+    var r = lbStage.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  function touchDist(t) {
+    var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy) || 1;
+  }
+
+  lbStage.addEventListener('touchstart', function (e) {
+    if (lb.hidden) return;
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      gesture = {
+        mode: 'pinch', d0: touchDist(e.touches), s0: view.s, tx0: view.tx, ty0: view.ty,
+        mx: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        my: (e.touches[0].clientY + e.touches[1].clientY) / 2
+      };
+    } else if (e.touches.length === 1) {
+      gesture = {
+        mode: view.s > 1.02 ? 'pan' : 'tap', x: e.touches[0].clientX, y: e.touches[0].clientY,
+        tx0: view.tx, ty0: view.ty
+      };
+    }
+  }, { passive: false });
+
+  lbStage.addEventListener('touchmove', function (e) {
+    if (!gesture || lb.hidden) return;
+    if (gesture.mode === 'pinch' && e.touches.length === 2) {
+      e.preventDefault();
+      var s = Math.min(6, Math.max(1, gesture.s0 * (touchDist(e.touches) / gesture.d0)));
+      var k = s / gesture.s0;
+      var c = stageCenter();
+      view.s = s;
+      view.tx = (gesture.mx - c.x) - k * (gesture.mx - c.x - gesture.tx0);
+      view.ty = (gesture.my - c.y) - k * (gesture.my - c.y - gesture.ty0);
+      lbClamp();
+      lbApply();
+    } else if (gesture.mode === 'pan' && e.touches.length === 1) {
+      e.preventDefault();
+      view.tx = gesture.tx0 + (e.touches[0].clientX - gesture.x);
+      view.ty = gesture.ty0 + (e.touches[0].clientY - gesture.y);
+      lbClamp();
+      lbApply();
+    }
+  }, { passive: false });
+
+  lbStage.addEventListener('touchend', function (e) {
+    if (!gesture) return;
+    if (gesture.mode === 'pinch' && e.touches.length === 1) {
+      gesture = {
+        mode: view.s > 1.02 ? 'pan' : 'tap', x: e.touches[0].clientX, y: e.touches[0].clientY,
+        tx0: view.tx, ty0: view.ty
+      };
+      return;
+    }
+    if (gesture.mode === 'pan' && view.s <= 1.02) lbReset();
+    gesture = null;
+  });
+
+  // 双击：放大到 2.5 倍 / 复位
+  var lastTap = 0, lastTapAt = null;
+  lbStage.addEventListener('touchend', function (e) {
+    if (e.touches.length) return;
+    var now = Date.now();
+    var tp = e.changedTouches && e.changedTouches[0];
+    if (now - lastTap < 320) {
+      if (view.s > 1.05) lbReset();
+      else lbZoomTo(2.5, (lastTapAt && lastTapAt.x) || (tp && tp.clientX), (lastTapAt && lastTapAt.y) || (tp && tp.clientY));
+      lastTap = 0;
+      lastTapAt = null;
+    } else {
+      lastTap = now;
+      lastTapAt = tp ? { x: tp.clientX, y: tp.clientY } : null;
+    }
+  });
+
+  // 双击 / 滚轮（电脑上也能用）
+  lbStage.addEventListener('dblclick', function (e) {
+    e.preventDefault();
+    if (view.s > 1.05) lbReset();
+    else lbZoomTo(2.5, e.clientX, e.clientY);
+  });
+  lbStage.addEventListener('wheel', function (e) {
+    if (lb.hidden) return;
+    e.preventDefault();
+    view.s = Math.min(6, Math.max(1, view.s * (e.deltaY < 0 ? 1.12 : 0.89)));
+    lbClamp();
+    lbApply();
+  }, { passive: false });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !lb.hidden) closeLB();
+  });
+
   document.addEventListener('click', function (e) {
     var t = e.target;
+
+    var fb = t.closest && t.closest('[data-full]');
+    if (fb) { openLB(fb.dataset.full); return; }
+
+    var zb = t.closest && t.closest('[data-zoom]');
+    if (zb) { openLB('img'); return; }
+
+    var lbt = t.closest && t.closest('[data-lbtab]');
+    if (lbt) {
+      var lid = lbt.dataset.lbtab;
+      lbLoad(lid, 0);
+      if (state.page === 'route') setRoute(lid);
+      return;
+    }
+
+    if (t.id === 'lbClose' || (t.closest && t.closest('#lbClose'))) { closeLB(); return; }
+    // 点空白处关闭（没放大时）
+    if (t === lbStage && view.s <= 1.02) { closeLB(); return; }
 
     var go = t.closest && t.closest('a.go');
     if (go) return; // 让链接自己跳
