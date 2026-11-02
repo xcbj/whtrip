@@ -192,11 +192,14 @@
         : '';
 
       var changes = changesHtml(d.changes);
+      var chgTag = (d.changes && d.changes.length)
+        ? ' · <span class="dh-chg">已调整 ' + d.changes.length + ' 处（绿=新增 黄=调整，下方可展开对比原方案）</span>'
+        : '';
 
       return '<article class="day-panel" data-day="' + d.id + '" hidden>' +
         '<div class="dayhead"><div class="dh-top"><span class="dh-id">' + esc(d.id) + '</span>' +
         '<h2>' + esc(d.title) + '</h2></div>' +
-        '<p class="dh-date">' + esc(d.date) + ' ' + esc(d.weekday) + ' · ' + d.rows.length + ' 个节点</p></div>' +
+        '<p class="dh-date">' + esc(d.date) + ' ' + esc(d.weekday) + ' · ' + d.rows.length + ' 个节点' + chgTag + '</p></div>' +
         '<ul class="timeline">' + rows + '</ul>' + changes + notices + transit + '</article>';
     }).join('');
 
