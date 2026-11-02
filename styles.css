@@ -109,6 +109,15 @@ button { touch-action: manipulation; cursor: pointer; }
 main { padding: 0; }
 .page { animation: fade .16s ease-out; }
 @keyframes fade { from { opacity: .55 } to { opacity: 1 } }
+
+/* 切天：滑动时面板跟手，切换时从手势方向滑入 */
+#main { overflow-x: clip; } /* 滑动位移时不产生横向滚动 */
+.day-panel.dragging { will-change: transform; }
+.day-panel.snap { transition: transform .2s cubic-bezier(.22,.61,.36,1); }
+@keyframes slideInR { from { opacity: .3; transform: translate3d(30px, 0, 0) } to { opacity: 1; transform: none } }
+@keyframes slideInL { from { opacity: .3; transform: translate3d(-30px, 0, 0) } to { opacity: 1; transform: none } }
+.day-panel.anim-r { animation: slideInR .19s cubic-bezier(.22,.61,.36,1) both; }
+.day-panel.anim-l { animation: slideInL .19s cubic-bezier(.22,.61,.36,1) both; }
 .page[hidden] { display: none; }
 
 /* ---------------- 卡片通用 ---------------- */

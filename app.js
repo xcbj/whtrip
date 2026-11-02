@@ -526,9 +526,20 @@
     if (!opts || !opts.noHash) writeHash();
   }
 
+  /* 切天过渡：面板从滑动方向一侧滑入（快，180—200ms） */
+  var animOK = true;
+  try { animOK = !window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { }
+  function slidePanel(el, dir) {
+    if (!animOK || !el) { return; }
+    el.classList.remove('anim-l', 'anim-r');
+    void el.offsetWidth; // 强制重排，动画才能重放
+    el.classList.add(dir > 0 ? 'anim-r' : 'anim-l');
+  }
+
   function setDay(id, opts) {
     if (id === 'rain') id = 'RAIN';
     if (!G.days.some(function (d) { return d.id === id; }) && id !== 'RAIN') id = 'D1';
+    var prev = state.day;
     state.day = id;
     $$('#daybarPlan .dchip').forEach(function (b) {
       b.setAttribute('aria-selected', String(b.dataset.day === id));
@@ -538,7 +549,20 @@
         if (left > 0) bar.scrollTo({ left: left, behavior: 'smooth' });
       }
     });
-    $$('.day-panel').forEach(function (p) { p.hidden = p.dataset.day !== id; });
+    var dir = 1;
+    if (prev && prev !== id) {
+      var seq = G.days.map(function (d) { return d.id; }).concat(['RAIN']);
+      var ai = seq.indexOf(prev), bi = seq.indexOf(id);
+      if (ai >= 0 && bi >= 0) dir = bi > ai ? 1 : -1;
+    }
+    if (opts && opts.dir) dir = opts.dir;
+    var fresh = null;
+    $$('.day-panel').forEach(function (p) {
+      var show = p.dataset.day === id;
+      p.hidden = !show;
+      if (show) { fresh = p; }
+    });
+    if (fresh && prev !== id && !(opts && opts.noAnim)) slidePanel(fresh, dir);
     if (!opts || !opts.noScroll) window.scrollTo(0, 0);
     if (!opts || !opts.noHash) writeHash();
   }
@@ -932,37 +956,74 @@
     renderShops();
   });
 
-  // 左右滑动切天
+  // 左右滑动切天：跟手拖动 + 松手切换（面板跟着手指走，到边界有阻力）
   (function () {
-    var sx = 0, sy = 0, on = false, moved = false;
+    var sx = 0, sy = 0, on = false, axis = null, panel = null;
     var main = $('#main');
     var IGNORE = '.daybar, .searchwrap, video, #shopSearch';
+    var MAX = 56;
+
+    function seq() { return G.days.map(function (d) { return d.id; }).concat(['RAIN']); }
+    function cur() { var i = seq().indexOf(state.day); return i < 0 ? 0 : i; }
+    function reset(el, animate) {
+      if (!el) { return; }
+      el.classList.remove('dragging');
+      if (animate) {
+        el.classList.add('snap');
+        el.style.transform = '';
+        setTimeout(function () { el.classList.remove('snap'); el.style.transform = ''; }, 240);
+      } else {
+        el.style.transform = '';
+      }
+    }
 
     main.addEventListener('touchstart', function (e) {
-      if (e.touches.length !== 1) { on = false; return; }
+      if (e.touches.length !== 1 || state.page !== 'plan') { on = false; return; }
       if (e.target.closest(IGNORE)) { on = false; return; }
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-      on = true; moved = false;
+      axis = null; on = true; panel = $('.day-panel:not([hidden])');
     }, { passive: true });
 
     main.addEventListener('touchmove', function (e) {
       if (!on || e.touches.length !== 1) return;
-      if (Math.abs(e.touches[0].clientX - sx) > 12) moved = true;
-    }, { passive: true });
+      var x = e.touches[0].clientX, y = e.touches[0].clientY;
+      var dx = x - sx, dy = y - sy;
+      if (!axis) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
+        if (axis === 'x' && panel) { panel.classList.add('dragging'); }
+      }
+      if (axis !== 'x') { return; }
+      e.preventDefault(); // 横向拖动时别让页面竖着滚
+      var n = seq().length, i = cur();
+      var d = dx * 0.42;
+      if ((dx < 0 && i >= n - 1) || (dx > 0 && i <= 0)) { d = d * 0.26; }
+      if (d > MAX) { d = MAX + (d - MAX) * 0.18; }
+      if (d < -MAX) { d = -MAX + (d + MAX) * 0.18; }
+      if (panel) { panel.style.transform = 'translate3d(' + d.toFixed(1) + 'px,0,0)'; }
+    }, { passive: false });
 
     main.addEventListener('touchend', function (e) {
-      if (!on) return;
+      if (!on) { return; }
       on = false;
-      if (state.page !== 'plan') return;
+      var wasX = axis === 'x', el = panel;
+      axis = null; panel = null;
+      if (!wasX) { reset(el, false); return; }
       var t = e.changedTouches[0];
-      var dx = t.clientX - sx, dy = t.clientY - sy;
-      if (Math.abs(dx) < 62 || Math.abs(dx) < Math.abs(dy) * 1.7) return;
-      var order = G.days.map(function (d) { return d.id; }).concat(['RAIN']);
-      var i = order.indexOf(state.day);
-      if (i < 0) i = 0;
-      var ni = dx < 0 ? i + 1 : i - 1;
-      if (ni < 0 || ni >= order.length) return;
-      setDay(order[ni]);
+      var fdx = t.clientX - sx, fdy = t.clientY - sy;
+      var flick = Math.abs(fdx) > 34 && Math.abs(fdx) > Math.abs(fdy) * 1.4;
+      if (Math.abs(fdx) < 62 && !flick) { reset(el, true); return; }
+      var arr = seq(), i = cur();
+      var ni = fdx < 0 ? i + 1 : i - 1;
+      if (ni < 0 || ni >= arr.length) { reset(el, true); return; }
+      if (el) { el.classList.remove('dragging'); el.style.transform = ''; }
+      setDay(arr[ni], { dir: fdx < 0 ? 1 : -1 });
+    }, { passive: true });
+
+    main.addEventListener('touchcancel', function () {
+      on = false; axis = null;
+      if (panel) { reset(panel, false); }
+      panel = null;
     }, { passive: true });
   })();
 
