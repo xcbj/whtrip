@@ -117,6 +117,7 @@
     var note = row.note && !/^[—–\-－]+$/.test(String(row.note).trim()) ? row.note : '';
 
     var h = '<li class="row" data-i="' + idx + '" data-kind="' + esc(row.kind) + '"' +
+      (row.tag ? ' data-tag="' + esc(row.tag) + '"' : '') +
       (sp[0] != null ? ' data-t="' + sp[0] + '" data-te="' + sp[1] + '"' : '') + '>' +
       '<div class="row-line"' + (hasDetail ? ' data-toggle="1"' : '') + '>' +
       timeCell + tag +
@@ -166,6 +167,20 @@
       '</span></summary><div class="acc-body"><p class="long-note">' + esc(t) + '</p></div></details>';
   }
 
+  function changesHtml(list) {
+    if (!list || !list.length) return '';
+    var body = list.map(function (c) {
+      return '<div class="chg"><div class="chg-t"><span class="chg-k">' + esc(c.time) + '</span></div>' +
+        '<div class="chg-row"><span class="chg-l new">改后</span><span class="chg-v">' + esc(c.now) + '</span></div>' +
+        '<div class="chg-row"><span class="chg-l old">原有</span><span class="chg-v old">' + esc(c.was) + '</span></div>' +
+        (c.why ? '<div class="chg-why">为什么：' + esc(c.why) + '</div>' : '') + '</div>';
+    }).join('');
+    return '<details class="acc chgbox"><summary>' +
+      '<span class="acc-t">本次改动 · 改后 vs 原有</span>' +
+      '<span class="hint" style="margin-left:auto;margin-right:8px">' + list.length + ' 处</span>' +
+      '</summary><div class="acc-body">' + body + '</div></details>';
+  }
+
   function buildDays() {
     var html = G.days.map(function (d) {
       var rows = d.rows.map(rowHtml).join('');
@@ -176,11 +191,13 @@
           d.transit.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol></div></details>'
         : '';
 
+      var changes = changesHtml(d.changes);
+
       return '<article class="day-panel" data-day="' + d.id + '" hidden>' +
         '<div class="dayhead"><div class="dh-top"><span class="dh-id">' + esc(d.id) + '</span>' +
         '<h2>' + esc(d.title) + '</h2></div>' +
         '<p class="dh-date">' + esc(d.date) + ' ' + esc(d.weekday) + ' · ' + d.rows.length + ' 个节点</p></div>' +
-        '<ul class="timeline">' + rows + '</ul>' + notices + transit + '</article>';
+        '<ul class="timeline">' + rows + '</ul>' + changes + notices + transit + '</article>';
     }).join('');
 
     // 雨天备选
