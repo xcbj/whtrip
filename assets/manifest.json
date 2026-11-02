@@ -9,7 +9,7 @@
   ],
   "offlineTier": "main",
   "reason": "主档合计 <= 4MB，离线单文件直接复用主档",
-  "mainMB": 2.08,
-  "liteMB": 1.45,
-  "maxMainKB": 757
+  "mainMB": 2.35,
+  "liteMB": 1.63,
+  "maxMainKB": 859
 }

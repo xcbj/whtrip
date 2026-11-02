@@ -14,6 +14,7 @@
   --warn: #d97706;
   --warn-weak: #fff7e6;
   --ok: #16a34a;
+  --ok-weak: #e7f5ec;
   --r: 14px;
   --top-h: 52px;
   --tab-h: 56px;
@@ -34,6 +35,8 @@
     --pri-weak: #16273f;
     --warn: #fbbf24;
     --warn-weak: #2a2313;
+    --ok: #4ade80;
+    --ok-weak: #14261a;
   }
 }
 
@@ -215,6 +218,18 @@ main { padding: 0; }
   font-size: 13px; line-height: 1.55;
 }
 .notice b { font-weight: 700; }
+.notice b:only-child { display: inline; }
+.acc.spare { background: var(--warn-weak); border: 1px dashed var(--warn); }
+.acc.spare > summary { color: var(--warn); font-size: 14px; }
+.long-note { white-space: pre-wrap; }
+
+/* 时间轴上的「新 / 改」标记：一眼看出这次动过哪几行 */
+.tag {
+  flex: none; margin-left: 2px; padding: 2px 6px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; line-height: 1.4;
+}
+.tag-改 { background: var(--warn-weak); color: var(--warn); }
+.tag-新 { background: var(--ok-weak, #e7f5ec); color: var(--ok, #1f7a4d); }
 
 /* ---------------- 折叠块 ---------------- */
 .acc { margin: 8px 12px; background: var(--card); border-radius: var(--r); overflow: hidden; }

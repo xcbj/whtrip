@@ -111,6 +111,7 @@
     var timeCell = tmM
       ? '<span class="time"><b>' + esc(tmM[1]) + '</b><i>' + esc(tmM[2]) + '</i></span>'
       : '<span class="time"><b>' + esc(tm) + '</b></span>';
+    var tag = row.tag ? '<span class="tag tag-' + esc(row.tag) + '">' + esc(row.tag) + '</span>' : '';
     var nav = row.nav || '';
     var copyWhat = nav || row.title;
     var note = row.note && !/^[—–\-－]+$/.test(String(row.note).trim()) ? row.note : '';
@@ -118,7 +119,7 @@
     var h = '<li class="row" data-i="' + idx + '" data-kind="' + esc(row.kind) + '"' +
       (sp[0] != null ? ' data-t="' + sp[0] + '" data-te="' + sp[1] + '"' : '') + '>' +
       '<div class="row-line"' + (hasDetail ? ' data-toggle="1"' : '') + '>' +
-      timeCell +
+      timeCell + tag +
       '<span class="ico" aria-hidden="true">' + kind.icon + '</span>' +
       '<div class="txt"><div class="tt">' + esc(row.title) + '</div>' +
       (note ? '<div class="nt">' + esc(note) + '</div>' : '') + '</div>';
@@ -152,12 +153,23 @@
     return h + '</li>';
   }
 
+  /* 短提示直接铺；长的（原方案留档、可选加项、备用安排）折叠起来，标题就是冒号前那半句 */
+  function noticeHtml(n) {
+    var t = String(n || '');
+    if (t.length <= 90) return '<div class="notice">' + esc(t) + '</div>';
+    var spare = t.indexOf('原方案留档') === 0 || t.indexOf('留档') > -1;
+    var head = t.split('：')[0] || t.slice(0, 18);
+    if (head.length > 30) head = head.slice(0, 30) + '…';
+    return '<details class="acc' + (spare ? ' spare' : '') + '"><summary>' +
+      '<span class="acc-t">' + esc(head) + '</span>' +
+      '<span class="hint" style="margin-left:auto;margin-right:6px">' + (spare ? '可切回原版' : '点开') +
+      '</span></summary><div class="acc-body"><p class="long-note">' + esc(t) + '</p></div></details>';
+  }
+
   function buildDays() {
     var html = G.days.map(function (d) {
       var rows = d.rows.map(rowHtml).join('');
-      var notices = (d.notices || []).map(function (n) {
-        return '<div class="notice">' + esc(n) + '</div>';
-      }).join('');
+      var notices = (d.notices || []).map(noticeHtml).join('');
       var transit = (d.transit && d.transit.length)
         ? '<details class="acc"><summary>段间交通<span class="hint" style="margin-left:auto;margin-right:8px">' +
           d.transit.length + ' 段</span></summary><div class="acc-body"><ol class="olist">' +
