@@ -112,6 +112,23 @@ main { padding: 0; }
 
 /* 切天：滑动时面板跟手，切换时从手势方向滑入 */
 #main { overflow-x: clip; } /* 滑动位移时不产生横向滚动 */
+
+/* 下拉刷新 */
+#pull {
+  position: fixed; top: 0; left: 0; right: 0; height: 60px;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--txt3);
+  z-index: 41; pointer-events: none;
+  transform: translate3d(0, -60px, 0); will-change: transform;
+  transition: opacity .15s;
+  opacity: 0;
+}
+#pull.on, #pull.busy { opacity: 1; }
+#pull .pi { font-size: 15px; line-height: 1; transition: transform .18s ease; }
+#pull.on .pi, #pull.busy .pi { transform: rotate(180deg); color: var(--pri); }
+#pull.busy .pi { animation: spin .9s linear infinite; }
+@keyframes spin { from { transform: rotate(180deg) } to { transform: rotate(540deg) } }
+.btn.wide { width: 100%; justify-content: center; }
 .day-panel.dragging { will-change: transform; }
 .day-panel.snap { transition: transform .2s cubic-bezier(.22,.61,.36,1); }
 @keyframes slideInR { from { opacity: .3; transform: translate3d(30px, 0, 0) } to { opacity: 1; transform: none } }
