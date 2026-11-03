@@ -3,7 +3,7 @@
  *      之后断网/飞行模式也能一键打开、切天、播动图。
  * 改了站内文件 → 把下面的 VERSION 加一，用户下次打开自动换新。
  */
-const VERSION = 'wh-20261103-af732272';
+const VERSION = 'wh-20261103-4b60511a';
 
 const CORE = [
   './',
@@ -49,6 +49,11 @@ self.addEventListener('install', (e) => {
     );
     self.skipWaiting();
   })());
+});
+
+// 页面点「强制刷新」/ 下拉刷新时，让排队的 SW 立刻接管
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {

@@ -43,6 +43,63 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.hidden = true; }, 1600);
   }
+  /* 下拉刷新 / 手动刷新：先让 SW 拿新版本，再重载 */
+  var pullEl = document.getElementById('pull');
+  var pullTxt = pullEl ? pullEl.querySelector('.pt') : null;
+  var refreshing = false;
+
+  function setPull(y) {
+    if (!pullEl) { return; }
+    var h = pullEl.offsetHeight || 60;
+    var reveal = y > 0 ? Math.min(h, Math.round(y * (h / 68))) : 0;
+    pullEl.style.setProperty('--pull-y', reveal + 'px');
+    pullEl.classList.toggle('on', y >= 68);
+    if (pullTxt) { pullTxt.textContent = y >= 68 ? '松手刷新' : '下拉刷新'; }
+  }
+
+  function pullBusy(on) {
+    if (!pullEl) { return; }
+    pullEl.classList.toggle('busy', on);
+    pullEl.classList.remove('on');
+    if (on) {
+      pullEl.style.setProperty('--pull-y', (pullEl.offsetHeight || 60) + 'px');
+      if (pullTxt) { pullTxt.textContent = '正在刷新…'; }
+    } else {
+      pullEl.style.setProperty('--pull-y', '0px');
+      if (pullTxt) { pullTxt.textContent = '下拉刷新'; }
+    }
+  }
+
+  function hardRefresh() {
+    if (refreshing) { return; }
+    refreshing = true;
+    pullBusy(true);
+    var done = false;
+    function fin() {
+      if (done) { return; }
+      done = true;
+      try { sessionStorage.setItem('wh-refreshed', '1'); } catch (e) { }
+      location.reload();
+    }
+    var guard = setTimeout(fin, 2200); // 断网时 update() 会很快失败，别卡住
+    function afterUpdate() { clearTimeout(guard); setTimeout(fin, 320); }
+    try {
+      if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistration) { fin(); return; }
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        if (!reg) { fin(); return; }
+        if (reg.waiting) { // 已有新版本在等，直接接管再刷新
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          var once = function () { clearTimeout(guard); fin(); };
+          navigator.serviceWorker.addEventListener('controllerchange', once);
+          setTimeout(once, 1400);
+          return;
+        }
+        var p = reg.update();
+        if (p && p.then) { p.then(afterUpdate, afterUpdate); } else { afterUpdate(); }
+      }, fin);
+    } catch (e) { fin(); }
+  }
+
   function copyText(t) {
     var done = function () { toast('已复制：' + t); };
     if (navigator.clipboard && window.isSecureContext) {
@@ -517,6 +574,11 @@
       h += acc('下雨 / 累了 / 想加点 · 换方案', G.alternatives.length, inner5);
     }
 
+    // 检查更新（独立 App 模式没有浏览器的下拉刷新）
+    h += '<div class="card" style="margin-top:14px"><h3>检查更新</h3>' +
+      '<p class="muted" style="margin:0 0 10px;line-height:1.6">在内容区从顶部往下拖也能刷新。刷新会先取一次最新版本，再重新加载页面。</p>' +
+      '<button class="btn pri wide" data-refresh="1">强制刷新</button></div>';
+
     h += '<p class="hint" style="margin:16px 16px 24px;line-height:1.6">资料来源：' +
       esc(G.meta.source) + '<br>生成于 ' + esc((G.meta.builtAt || '').slice(0, 10)) +
       ' · 价格/营业时间以当日为准</p>';
@@ -959,6 +1021,9 @@
       return;
     }
 
+    var rf = t.closest && t.closest('[data-refresh]');
+    if (rf) { hardRefresh(); return; }
+
     var cp = t.closest && t.closest('[data-copy]');
     if (cp) { e.preventDefault(); copyText(cp.dataset.copy); return; }
 
@@ -983,6 +1048,8 @@
     var IGNORE = '.daybar, .searchwrap, video, #shopSearch';
     var MAX = 56;
 
+    var PULL_MAX = 76, PULL_ARM = 68, pull = 0, pulling = false;
+
     function seq() { return G.days.map(function (d) { return d.id; }).concat(['RAIN']); }
     function cur() { var i = seq().indexOf(state.day); return i < 0 ? 0 : i; }
     function reset(el, animate) {
@@ -1001,7 +1068,8 @@
       if (e.touches.length !== 1 || state.page !== 'plan') { on = false; return; }
       if (e.target.closest(IGNORE)) { on = false; return; }
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-      axis = null; on = true; panel = $('.day-panel:not([hidden])');
+      axis = null; on = true; pulling = false; pull = 0;
+      panel = $('.day-panel:not([hidden])');
     }, { passive: true });
 
     main.addEventListener('touchmove', function (e) {
@@ -1013,7 +1081,18 @@
         axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
         if (axis === 'x' && panel) { panel.classList.add('dragging'); }
       }
-      if (axis !== 'x') { return; }
+      if (axis !== 'x') {
+        // 顶部继续下拉 → 下拉刷新（独立 App 模式没有系统自带的下拉刷新）
+        if (axis === 'y' && !refreshing && window.pageYOffset <= 0 && dy > 0) {
+          pulling = true;
+          pull = Math.min(PULL_MAX, dy * 0.55);
+          e.preventDefault();
+          setPull(pull);
+        } else if (pulling) {
+          pulling = false; pull = 0; setPull(0);
+        }
+        return;
+      }
       e.preventDefault(); // 横向拖动时别让页面竖着滚
       var n = seq().length, i = cur();
       var d = dx * 0.42;
@@ -1026,6 +1105,13 @@
     main.addEventListener('touchend', function (e) {
       if (!on) { return; }
       on = false;
+      if (pulling) {
+        pulling = false;
+        var armed = pull >= PULL_ARM;
+        pull = 0;
+        if (armed) { hardRefresh(); } else { setPull(0); }
+        return;
+      }
       var wasX = axis === 'x', el = panel;
       axis = null; panel = null;
       if (!wasX) { reset(el, false); return; }
@@ -1042,6 +1128,7 @@
 
     main.addEventListener('touchcancel', function () {
       on = false; axis = null;
+      if (pulling) { pulling = false; pull = 0; setPull(0); }
       if (panel) { reset(panel, false); }
       panel = null;
     }, { passive: true });
@@ -1061,7 +1148,14 @@
   initToday();
   applyHash();
 
-  window.__APP__ = { setPage: setPage, setDay: setDay, setRoute: setRoute, state: state };
+  try {
+    if (sessionStorage.getItem('wh-refreshed')) {
+      sessionStorage.removeItem('wh-refreshed');
+      setTimeout(function () { toast('已刷新到最新内容'); }, 260);
+    }
+  } catch (e) { }
+
+  window.__APP__ = { setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, state: state };
 
   /* =========================================================
      Service Worker（GitHub Pages 上才生效）
