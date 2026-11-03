@@ -181,6 +181,25 @@
       '</summary><div class="acc-body">' + body + '</div></details>';
   }
 
+  /* 附一 去程全流程：D1 面板里折叠展示，逐分钟可照着走 */
+  function flowHtml(f) {
+    if (!f || !f.rows || !f.rows.length) return '';
+    var body = f.rows.map(function (r) {
+      return '<div class="flow-row"><span class="fl-time">' + esc(r.time) + '</span>' +
+        '<div class="fl-main"><div class="fl-step">' + esc(r.step) + '</div>' +
+        (r.how ? '<div class="fl-how">' + esc(r.how) + '</div>' : '') + '</div></div>';
+    }).join('');
+    if ((f.notes || []).length) {
+      body += f.notes.map(function (t) {
+        return '<p class="long-note" style="margin:12px 0 0">' + esc(t) + '</p>';
+      }).join('');
+    }
+    return '<details class="acc flowbox"><summary>' +
+      '<span class="acc-t">去程全流程 · 家门口 → 登机 → 落地 → 酒店房门</span>' +
+      '<span class="hint" style="margin-left:auto;margin-right:8px">' + f.rows.length + ' 步 · 照着走</span>' +
+      '</summary><div class="acc-body">' + body + '</div></details>';
+  }
+
   function buildDays() {
     var html = G.days.map(function (d) {
       var rows = d.rows.map(rowHtml).join('');
@@ -191,6 +210,7 @@
           d.transit.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol></div></details>'
         : '';
 
+      var flow = flowHtml(d.flow);
       var changes = changesHtml(d.changes);
       var chgTag = (d.changes && d.changes.length)
         ? ' · <span class="dh-chg">已调整 ' + d.changes.length + ' 处（绿=新增 黄=调整，下方可展开对比原方案）</span>'
@@ -200,7 +220,7 @@
         '<div class="dayhead"><div class="dh-top"><span class="dh-id">' + esc(d.id) + '</span>' +
         '<h2>' + esc(d.title) + '</h2></div>' +
         '<p class="dh-date">' + esc(d.date) + ' ' + esc(d.weekday) + ' · ' + d.rows.length + ' 个节点' + chgTag + '</p></div>' +
-        '<ul class="timeline">' + rows + '</ul>' + changes + notices + transit + '</article>';
+        '<ul class="timeline">' + rows + '</ul>' + flow + changes + notices + transit + '</article>';
     }).join('');
 
     // 雨天备选
@@ -471,7 +491,7 @@
       if ((G.hotelNotes || []).length) {
         inner3 += G.hotelNotes.map(function (t) { return '<p class="muted" style="margin:9px 0;line-height:1.65">' + esc(t) + '</p>'; }).join('');
       }
-      h += acc('住哪三家 · 订房要点', G.hotels.length, inner3);
+      h += acc('已订酒店 · 到店要点', G.hotels.length, inner3);
     }
 
     // 预算

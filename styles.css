@@ -458,3 +458,16 @@ body.lb-open { overflow: hidden; }
   background: var(--warn-weak); color: var(--warn); font-size: 12px; font-weight: 700;
   vertical-align: 1px;
 }
+
+/* 附一 去程全流程（D1 面板折叠块） */
+.acc.flowbox summary .acc-t { font-weight: 700; }
+.flow-row { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line, #e6e2da); }
+.flow-row:last-of-type { border-bottom: 0; }
+.fl-time { flex: none; width: 92px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent, #b3541e); font-size: 13px; }
+.fl-main { flex: 1; min-width: 0; }
+.fl-step { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.fl-how { margin-top: 3px; font-size: 13px; line-height: 1.6; color: var(--muted, #6b6558); }
+@media (max-width: 560px) {
+  .flow-row { gap: 8px; }
+  .fl-time { width: 74px; font-size: 12px; }
+}
