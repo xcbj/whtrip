@@ -590,6 +590,13 @@
      状态与切换
      ========================================================= */
   var state = { page: 'plan', day: 'D1', route: 'd1', q: '' };
+
+  var firstHash = true; // 首次按 hash 定位时不放动画
+  function savedDay() {
+    var d = 'D1';
+    try { d = localStorage.getItem('wh-day') || 'D1'; } catch (e) { }
+    return /^(D[1-4]|RAIN)$/.test(d) ? d : 'D1';
+  }
   var inited = { route: false, eat: false, shops: false, prep: false };
 
   function setPage(p, opts) {
@@ -603,6 +610,11 @@
     if (p === 'eat' && !inited.eat) { buildEat(); inited.eat = true; }
     if (p === 'shops' && !inited.shops) { renderShops(); inited.shops = true; }
     if (p === 'prep' && !inited.prep) { buildPrep(); inited.prep = true; }
+
+    // 兜底：从别的 tab 回到行程时，如果一天都没选（比如刷新后带着 #prep 重载），把上次看的那天显示出来
+    if (p === 'plan' && !$('.day-panel:not([hidden])')) {
+      setDay(state.day || savedDay(), { noHash: true, noAnim: true });
+    }
 
     if (!opts || !opts.noScroll) window.scrollTo(0, 0);
     if (!opts || !opts.noHash) writeHash();
@@ -638,6 +650,7 @@
       if (ai >= 0 && bi >= 0) dir = bi > ai ? 1 : -1;
     }
     if (opts && opts.dir) dir = opts.dir;
+    try { localStorage.setItem('wh-day', id); } catch (e) { }
     var fresh = null;
     $$('.day-panel').forEach(function (p) {
       var show = p.dataset.day === id;
@@ -671,9 +684,9 @@
 
   function applyHash() {
     var h = (location.hash || '').replace(/^#/, '').toLowerCase();
-    if (!h) { setPage('plan', { noHash: true }); setDay(todayDay() || 'D1', { noHash: true }); return; }
-    if (h === 'rain') { setPage('plan', { noHash: true }); setDay('RAIN', { noHash: true }); return; }
-    if (/^d[1-4]$/.test(h)) { setPage('plan', { noHash: true }); setDay(h.toUpperCase(), { noHash: true }); return; }
+    if (!h) { setPage('plan', { noHash: true }); setDay(todayDay() || savedDay(), { noHash: true, noAnim: firstHash }); return; }
+    if (h === 'rain') { setPage('plan', { noHash: true }); setDay('RAIN', { noHash: true, noAnim: firstHash }); return; }
+    if (/^d[1-4]$/.test(h)) { setPage('plan', { noHash: true }); setDay(h.toUpperCase(), { noHash: true, noAnim: firstHash }); return; }
     if (h.indexOf('route') === 0) {
       setPage('route', { noHash: true });
       var r = h.split('-')[1];
@@ -682,7 +695,7 @@
     }
     if (['eat', 'shops', 'prep'].indexOf(h) >= 0) { setPage(h, { noHash: true }); return; }
     setPage('plan', { noHash: true });
-    setDay(todayDay() || 'D1', { noHash: true });
+    setDay(todayDay() || savedDay(), { noHash: true, noAnim: firstHash });
   }
 
   /* =========================================================
@@ -1145,8 +1158,10 @@
   buildDaybar();
   buildDays();
   buildIntro();
+  setDay(savedDay(), { noHash: true, noAnim: true }); // 没写死某天时，回到上次看的那天
   initToday();
   applyHash();
+  firstHash = false;
 
   try {
     if (sessionStorage.getItem('wh-refreshed')) {
