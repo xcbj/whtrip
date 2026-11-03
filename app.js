@@ -468,8 +468,69 @@
       '</summary><div class="acc-body">' + inner + '</div></details>';
   }
 
+  /* ---------- 景点与门票待办（勾选状态存本机） ---------- */
+  var TK_KEY = 'wh-tk';
+  function tkDone() {
+    try { return JSON.parse(localStorage.getItem(TK_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function tkSet(name, on) {
+    var m = tkDone();
+    if (on) m[name] = 1; else delete m[name];
+    try { localStorage.setItem(TK_KEY, JSON.stringify(m)); } catch (e) { }
+  }
+  function tkDue(tk) {
+    if (!tk.due) return { text: '随时可办', cls: 'any' };
+    var t = new Date(TRIP.y, tk.due.m - 1, tk.due.d);
+    var n0 = new Date(), today = new Date(n0.getFullYear(), n0.getMonth(), n0.getDate());
+    var n = Math.round((t - today) / 86400000);
+    if (n > 1) return { text: '还剩 ' + n + ' 天', cls: 'soon' };
+    if (n === 1) return { text: '明天开约', cls: 'soon' };
+    if (n === 0) return { text: '今天开约', cls: 'now' };
+    return { text: '已开放', cls: 'past' };
+  }
+  function tkRow(tk, done) {
+    var u = tkDue(tk), d = !!done[tk.what];
+    return '<div class="tk' + (d ? ' done' : '') + '" data-tk="' + esc(tk.what) + '">' +
+      '<button class="tkbox" data-tktoggle="' + esc(tk.what) + '" aria-pressed="' + (d ? 'true' : 'false') + '" aria-label="标记完成">✓</button>' +
+      '<div class="tkb">' +
+        '<div class="tkline"><span class="tkname">' + esc(tk.what) + '</span>' +
+          (tk.hot ? '<span class="tkhot">要抢</span>' : '') +
+          '<span class="tkdue ' + u.cls + '">' + esc(u.text) + '</span></div>' +
+        '<div class="tkmeta"><span class="tkm1">参观 ' + esc(tk.day) + '　·　' + esc(tk.channel) + '</span></div>' +
+        '<div class="tkmeta2">' + esc(tk.earliest) + '</div>' +
+        '<details class="tkd"><summary>不去会怎样 / 约不上怎么办</summary>' +
+          '<div class="tkp"><b>缺席：</b>' + esc(tk.miss) + '</div>' +
+          '<div class="tkp"><b>补救：</b>' + esc(tk.fix) + '</div>' +
+        '</details>' +
+      '</div></div>';
+  }
+  function ticketCard() {
+    var done = tkDone(), n = 0;
+    var rows = G.tickets.map(function (tk) { if (done[tk.what]) n++; return tkRow(tk, done); }).join('');
+    return '<div class="card tkc" id="ticketCard">' +
+      '<div class="tkh"><h2>景点与门票 · 待办</h2><span class="tkcnt" id="tkCnt">' + n + '/' + G.tickets.length + ' 已完成</span></div>' +
+      '<div class="tklist">' + rows + '</div>' +
+      '<div class="tkhint">约完点左边圆圈打勾，勾选状态存在本机；「还剩 N 天」= 距离最早能约那天。</div>' +
+      '</div>';
+  }
+  function tkRefresh() {
+    var done = tkDone(), n = 0;
+    $$('#ticketCard .tk').forEach(function (row) {
+      var name = row.dataset.tk, d = !!done[name];
+      if (d) n++;
+      row.classList.toggle('done', d);
+      var b = row.querySelector('.tkbox');
+      if (b) b.setAttribute('aria-pressed', d ? 'true' : 'false');
+    });
+    var c = $('#tkCnt');
+    if (c) c.textContent = n + '/' + G.tickets.length + ' 已完成';
+  }
+
   function buildPrep() {
     var h = '';
+
+    // 景点与门票待办（可勾选）
+    if ((G.tickets || []).length) h += ticketCard();
 
     // 一页看懂
     if ((G.onePage || []).length) {
@@ -1035,6 +1096,17 @@
 
     var cp = t.closest && t.closest('[data-copy]');
     if (cp) { e.preventDefault(); copyText(cp.dataset.copy); return; }
+
+    var tk = t.closest && t.closest('[data-tktoggle]');
+    if (tk) {
+      e.preventDefault();
+      var name = tk.dataset.tktoggle;
+      var on = tk.getAttribute('aria-pressed') !== 'true';
+      tkSet(name, on);
+      tkRefresh();
+      if (on) toast('已标记：' + name + ' 完成');
+      return;
+    }
 
     var pl = t.closest && t.closest('[data-play]');
     if (pl) { playVideo(pl); return; }

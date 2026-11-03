@@ -492,3 +492,51 @@ body.lb-open { overflow: hidden; }
   .flow-row { gap: 8px; }
   .fl-time { width: 74px; font-size: 12px; }
 }
+
+/* ============ 准备页：景点与门票待办 ============ */
+.tkc { padding: 12px 12px 10px; }
+.tkh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 2px 8px; }
+.tkh h2 { font-size: 15px; font-weight: 700; margin: 0; }
+.tkcnt { font-size: 12px; color: var(--txt3); white-space: nowrap; }
+.tklist { display: flex; flex-direction: column; }
+.tk { display: flex; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--line); }
+.tk:first-child { border-top: 0; }
+.tkbox {
+  flex: 0 0 auto; width: 26px; height: 26px; margin-top: 1px; border-radius: 50%;
+  border: 1.5px solid var(--line); background: var(--card2); color: transparent;
+  font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent; cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.tk.done .tkbox { background: var(--ok); border-color: var(--ok); color: #fff; }
+.tkb { flex: 1 1 auto; min-width: 0; }
+.tkline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tkname { font-size: 14.5px; font-weight: 600; }
+.tk.done .tkname { text-decoration: line-through; color: var(--txt3); }
+.tkhot {
+  font-size: 10.5px; font-weight: 700; color: #fff; background: #e5484d;
+  padding: 1px 5px; border-radius: 5px; line-height: 1.5;
+}
+.tkdue {
+  font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+  background: var(--card2); color: var(--txt2); border: 1px solid var(--line); white-space: nowrap;
+}
+.tkdue.soon { background: var(--warn-weak); color: var(--warn); border-color: transparent; }
+.tkdue.now { background: #fde8e8; color: #c62a2f; border-color: transparent; }
+.tkdue.past, .tkdue.any { background: var(--card2); color: var(--txt3); }
+@media (prefers-color-scheme: dark) {
+  .tkdue.now { background: #3a1d1f; color: #ff8a8f; }
+}
+.tkmeta { font-size: 12px; color: var(--txt2); margin-top: 3px; word-break: break-word; }
+.tkm1 { display: block; }
+.tkmeta2 { font-size: 12px; color: var(--txt3); margin-top: 1px; }
+.tkd { margin-top: 6px; }
+.tkd summary {
+  font-size: 12px; color: var(--pri); cursor: pointer; list-style: none;
+  padding: 3px 0; -webkit-tap-highlight-color: transparent;
+}
+.tkd summary::-webkit-details-marker { display: none; }
+.tkd summary::after { content: " ▾"; }
+.tkd[open] summary::after { content: " ▴"; }
+.tkp { font-size: 12.5px; color: var(--txt2); line-height: 1.55; margin-top: 4px; }
+.tkp b { color: var(--txt); font-weight: 600; }
+.tkhint { font-size: 11.5px; color: var(--txt3); margin: 10px 2px 0; line-height: 1.5; }
