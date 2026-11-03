@@ -592,11 +592,6 @@
   var state = { page: 'plan', day: 'D1', route: 'd1', q: '' };
 
   var firstHash = true; // 首次按 hash 定位时不放动画
-  function savedDay() {
-    var d = 'D1';
-    try { d = localStorage.getItem('wh-day') || 'D1'; } catch (e) { }
-    return /^(D[1-4]|RAIN)$/.test(d) ? d : 'D1';
-  }
   var inited = { route: false, eat: false, shops: false, prep: false };
 
   function setPage(p, opts) {
@@ -613,7 +608,7 @@
 
     // 兜底：从别的 tab 回到行程时，如果一天都没选（比如刷新后带着 #prep 重载），把上次看的那天显示出来
     if (p === 'plan' && !$('.day-panel:not([hidden])')) {
-      setDay(state.day || savedDay(), { noHash: true, noAnim: true });
+      setDay(state.day || todayDay() || 'D1', { noHash: true, noAnim: true });
     }
 
     if (!opts || !opts.noScroll) window.scrollTo(0, 0);
@@ -650,7 +645,6 @@
       if (ai >= 0 && bi >= 0) dir = bi > ai ? 1 : -1;
     }
     if (opts && opts.dir) dir = opts.dir;
-    try { localStorage.setItem('wh-day', id); } catch (e) { }
     var fresh = null;
     $$('.day-panel').forEach(function (p) {
       var show = p.dataset.day === id;
@@ -684,7 +678,7 @@
 
   function applyHash() {
     var h = (location.hash || '').replace(/^#/, '').toLowerCase();
-    if (!h) { setPage('plan', { noHash: true }); setDay(todayDay() || savedDay(), { noHash: true, noAnim: firstHash }); return; }
+    if (!h) { setPage('plan', { noHash: true }); setDay(todayDay() || 'D1', { noHash: true, noAnim: firstHash }); return; }
     if (h === 'rain') { setPage('plan', { noHash: true }); setDay('RAIN', { noHash: true, noAnim: firstHash }); return; }
     if (/^d[1-4]$/.test(h)) { setPage('plan', { noHash: true }); setDay(h.toUpperCase(), { noHash: true, noAnim: firstHash }); return; }
     if (h.indexOf('route') === 0) {
@@ -695,7 +689,7 @@
     }
     if (['eat', 'shops', 'prep'].indexOf(h) >= 0) { setPage(h, { noHash: true }); return; }
     setPage('plan', { noHash: true });
-    setDay(todayDay() || savedDay(), { noHash: true, noAnim: firstHash });
+    setDay(todayDay() || 'D1', { noHash: true, noAnim: firstHash });
   }
 
   /* =========================================================
@@ -703,14 +697,16 @@
      ========================================================= */
   var TRIP = { y: 2026, m: 11, d: 12, days: 4 };
 
+  function dateKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
   function tripDayIndex(now) {
     if (now.getFullYear() !== TRIP.y) return -1;
     if (now.getMonth() + 1 !== TRIP.m) return -1;
     var dd = now.getDate();
     return (dd >= TRIP.d && dd < TRIP.d + TRIP.days) ? dd - TRIP.d : -1;
   }
-  function todayDay() {
-    var i = tripDayIndex(new Date());
+  function todayDay(now) {
+    var i = tripDayIndex(now || new Date());
     return i >= 0 ? 'D' + (i + 1) : null;
   }
 
@@ -1147,6 +1143,24 @@
     }, { passive: true });
   })();
 
+  // 从后台回前台时如果已经跨天，重新对一次「今天」
+  (function () {
+    var seen = dateKey(new Date());
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible') return;
+      var k = dateKey(new Date());
+      if (k === seen) return;
+      seen = k;
+      var d = todayDay();
+      if (d && d !== state.day) {
+        setPage('plan');
+        setDay(d);
+        toast('已经 ' + d + ' 了，已切到当天');
+      }
+      initToday();
+    });
+  })();
+
   window.addEventListener('hashchange', function () {
     var h = (location.hash || '').replace(/^#/, '').toLowerCase();
     if (h === 'rain' || /^d[1-4]$/.test(h) || ['eat', 'shops', 'prep'].indexOf(h) >= 0 || h.indexOf('route') === 0) applyHash();
@@ -1158,7 +1172,7 @@
   buildDaybar();
   buildDays();
   buildIntro();
-  setDay(savedDay(), { noHash: true, noAnim: true }); // 没写死某天时，回到上次看的那天
+  setDay(todayDay() || 'D1', { noHash: true, noAnim: true }); // 打开就在行程期 → 直接选中今天；否则 D1
   initToday();
   applyHash();
   firstHash = false;
@@ -1170,7 +1184,7 @@
     }
   } catch (e) { }
 
-  window.__APP__ = { setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, state: state };
+  window.__APP__ = { setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, todayDay: todayDay, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state };
 
   /* =========================================================
      Service Worker（GitHub Pages 上才生效）
