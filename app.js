@@ -70,34 +70,167 @@
     }
   }
 
+  /* ---------- 国内镜像更新通道 ----------
+     github.io 在国内经常被污染/重置：独立 App 模式下点「强制刷新」，其实是去
+     github.io 重新取 sw.js，取不到就静默失败，于是永远停在旧缓存——这就是
+     「不开代理拉不到最新改动」的原因。这里改走 jsDelivr 的 GitHub 通道
+     （国内多数网络可直连、带 CORS），把 version.json 与变更文件直接写进本机
+     缓存再重载，全程不碰 github.io。 */
+  var MIRRORS = [
+    'https://cdn.jsdelivr.net/gh/xcbj/whtrip@main/',
+    'https://fastly.jsdelivr.net/gh/xcbj/whtrip@main/',
+    'https://gcore.jsdelivr.net/gh/xcbj/whtrip@main/',
+    'https://testingcf.jsdelivr.net/gh/xcbj/whtrip@main/'
+  ];
+  var VER_FILE = 'version.json';
+
+  function fetchT(url, ms, opt) {
+    opt = opt || {};
+    opt.cache = 'no-store';
+    if (typeof AbortController === 'undefined') { return fetch(url, opt); }
+    var ac = new AbortController();
+    var timer = setTimeout(function () { try { ac.abort(); } catch (e) { } }, ms);
+    opt.signal = ac.signal;
+    return fetch(url, opt).then(function (r) { clearTimeout(timer); return r; },
+      function (e) { clearTimeout(timer); throw e; });
+  }
+
+  function badVer(o) { return !o || typeof o.v !== 'string' || !o.v || !Array.isArray(o.files); }
+  function absUrl(p) { return new URL(p, location.href).href; }
+
+  /* 纯函数：远端清单 vs 本地清单 → 需要重下的路径（已最新给 []，坏数据给 null） */
+  function planChanges(remote, local) {
+    if (badVer(remote)) { return null; }
+    var have = {};
+    if (local && Array.isArray(local.files)) {
+      local.files.forEach(function (f) { if (f && f.p) { have[f.p] = f.h; } });
+    }
+    var all = remote.files.filter(function (f) { return f && f.p; }).map(function (f) { return f.p; });
+    if (badVer(local)) { return all; }               // 老版本安装还没有清单 → 全量对齐一次
+    if (local.v === remote.v) { return []; }
+    return remote.files.filter(function (f) { return f && f.p && have[f.p] !== f.h; })
+      .map(function (f) { return f.p; });
+  }
+
+  function cachedVer() {
+    if (!window.caches) { return Promise.resolve(null); }
+    return caches.match(absUrl(VER_FILE), { ignoreSearch: true }).then(function (r) {
+      return r ? r.json() : null;
+    }).catch(function () { return null; });
+  }
+
+  /* 新内容写进所有已存在的缓存（SW 缓存优先，写完立刻生效）
+     注意 index.html 还要覆盖 './' 这个键：直接访问站点根目录时命中的是它。 */
+  function putAll(p, res) {
+    var keys = [absUrl(p)];
+    if (p === 'index.html') { keys.push(absUrl('./')); }
+    if (!window.caches) { return Promise.resolve(); }
+    return caches.keys().then(function (list) {
+      return Promise.all(list.map(function (name) {
+        return caches.open(name).then(function (c) {
+          return Promise.all(keys.map(function (k) { return c.put(k, res.clone()); }));
+        });
+      }));
+    });
+  }
+
+  function mirrorUpdate(o) {
+    o = o || {};
+    var out = { ok: false, mirror: '', local: '', remote: '', changed: [], err: '' };
+    var i = 0;
+    return cachedVer().then(function (local) {
+      out.local = (local && local.v) || '';
+      function next(lastErr) {
+        if (i >= MIRRORS.length) { out.err = lastErr || 'no mirror'; return out; }
+        var base = MIRRORS[i++];
+        return fetchT(base + VER_FILE + '?t=' + Date.now(), o.timeout || 4500).then(function (r) {
+          if (!r.ok) { throw new Error('HTTP ' + r.status); }
+          return r.json();
+        }).then(function (remote) {
+          if (badVer(remote)) { throw new Error('版本清单损坏'); }
+          var todo = planChanges(remote, local);
+          if (todo === null) { throw new Error('版本清单损坏'); }
+          out.mirror = base;
+          out.remote = remote.v;
+          out.changed = todo;
+          if (!todo.length || o.planOnly) { out.ok = true; return out; }
+          return todo.reduce(function (chain, p) {
+            return chain.then(function () {
+              return fetchT(base + p + '?t=' + Date.now(), o.fileTimeout || 25000).then(function (r) {
+                if (!r.ok) { throw new Error(p + ' HTTP ' + r.status); }
+                return putAll(p, r);
+              });
+            });
+          }, Promise.resolve()).then(function () {
+            var body = new Blob([JSON.stringify(remote)], { type: 'application/json' });
+            return putAll(VER_FILE, new Response(body, { headers: { 'Content-Type': 'application/json' } }));
+          }).then(function () { out.ok = true; return out; });
+        }).catch(function (e) { return next(String((e && e.message) || e)); });
+      }
+      return next('');
+    });
+  }
+
+  /* 兜底老路：镜像都不通时再找 GitHub（有代理或网络好时有效） */
+  function ghUpdate(cb) {
+    var finished = false;
+    function done(ok) {
+      if (finished) { return; }
+      finished = true;
+      clearTimeout(guard);
+      cb(ok);
+    }
+    var guard = setTimeout(function () { done(false); }, 2500);
+    try {
+      if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistration) { done(false); return; }
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        if (!reg) { done(false); return; }
+        if (reg.waiting) {           // 已有新版本在等 → 直接接管
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          navigator.serviceWorker.addEventListener('controllerchange', function () { done(true); });
+          setTimeout(function () { done(true); }, 1400);
+          return;
+        }
+        var p = reg.update();
+        if (p && p.then) { p.then(function () { done(true); }, function () { done(false); }); }
+        else { done(true); }
+      }, function () { done(false); });
+    } catch (e) { done(false); }
+  }
+
+  /* 下拉刷新 / 强制刷新：镜像优先，失败退回 GitHub */
   function hardRefresh() {
     if (refreshing) { return; }
     refreshing = true;
     pullBusy(true);
-    var done = false;
-    function fin() {
-      if (done) { return; }
-      done = true;
-      try { sessionStorage.setItem('wh-refreshed', '1'); } catch (e) { }
+    var over = false;
+    function stop(msg) {
+      if (over) { return; }
+      over = true;
+      refreshing = false;
+      pullBusy(false);
+      setPull(0);
+      if (msg) { toast(msg); }
+    }
+    function reloadWith(msg) {
+      if (over) { return; }
+      over = true;
+      try { sessionStorage.setItem('wh-refreshed', msg); } catch (e) { }
       location.reload();
     }
-    var guard = setTimeout(fin, 2200); // 断网时 update() 会很快失败，别卡住
-    function afterUpdate() { clearTimeout(guard); setTimeout(fin, 320); }
-    try {
-      if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistration) { fin(); return; }
-      navigator.serviceWorker.getRegistration().then(function (reg) {
-        if (!reg) { fin(); return; }
-        if (reg.waiting) { // 已有新版本在等，直接接管再刷新
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          var once = function () { clearTimeout(guard); fin(); };
-          navigator.serviceWorker.addEventListener('controllerchange', once);
-          setTimeout(once, 1400);
-          return;
-        }
-        var p = reg.update();
-        if (p && p.then) { p.then(afterUpdate, afterUpdate); } else { afterUpdate(); }
-      }, fin);
-    } catch (e) { fin(); }
+    function fallbackGh() {
+      ghUpdate(function (ok) {
+        if (ok) { reloadWith('已刷新到最新内容'); } else { stop('网络不通，仍在使用本地缓存'); }
+      });
+    }
+    mirrorUpdate({}).then(function (r) {
+      if (r && r.ok && (r.changed || []).length) {
+        reloadWith('已从镜像更新（' + r.changed.length + ' 个文件）');
+        return;
+      }
+      if (r && r.ok) { stop('已是最新版本'); return; }
+      fallbackGh();
+    }, fallbackGh);
   }
 
   function copyText(t) {
@@ -660,7 +793,9 @@
 
     // 检查更新（独立 App 模式没有浏览器的下拉刷新）
     h += '<div class="card" style="margin-top:14px"><h3>检查更新</h3>' +
-      '<p class="muted" style="margin:0 0 10px;line-height:1.6">在内容区从顶部往下拖也能刷新。刷新会先取一次最新版本，再重新加载页面。</p>' +
+      '<p class="muted" style="margin:0 0 10px;line-height:1.6">在内容区从顶部往下拖也能刷新。<br>' +
+      '刷新先走国内镜像（jsDelivr，<b>不需要代理</b>），有新内容就写进本机缓存再重载；镜像不通才退回 GitHub。</p>' +
+      '<p class="muted" style="margin:0 0 10px">当前版本 <b id="verNow">读取中…</b></p>' +
       '<button class="btn pri wide" data-refresh="1">强制刷新</button></div>';
 
     h += '<p class="hint" style="margin:16px 16px 24px;line-height:1.6">资料来源：' +
@@ -668,6 +803,10 @@
       ' · 价格/营业时间以当日为准</p>';
 
     $('#prepBody').innerHTML = h;
+    cachedVer().then(function (v) {
+      var el = document.getElementById('verNow');
+      if (el) { el.textContent = (v && v.v) ? v.v : '未知（下次刷新时写入）'; }
+    });
   }
 
   /* =========================================================
@@ -1331,13 +1470,14 @@
   firstHash = false;
 
   try {
-    if (sessionStorage.getItem('wh-refreshed')) {
+    var rfMsg = sessionStorage.getItem('wh-refreshed');
+    if (rfMsg) {
       sessionStorage.removeItem('wh-refreshed');
-      setTimeout(function () { toast('已刷新到最新内容'); }, 260);
+      setTimeout(function () { toast(rfMsg === '1' ? '已刷新到最新内容' : rfMsg); }, 260);
     }
   } catch (e) { }
 
-  window.__APP__ = { tkRender: tkRender, setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, todayDay: todayDay, todayRoute: todayRoute, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state };
+  window.__APP__ = { tkRender: tkRender, setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, todayDay: todayDay, todayRoute: todayRoute, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state, mirrors: MIRRORS, planChanges: planChanges, mirrorUpdate: mirrorUpdate, cachedVer: cachedVer };
 
   /* =========================================================
      Service Worker（GitHub Pages 上才生效）
