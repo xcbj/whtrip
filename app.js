@@ -462,10 +462,15 @@
   /* =========================================================
      渲染 · 准备
      ========================================================= */
-  function acc(title, count, inner, open) {
-    return '<details class="acc"' + (open ? ' open' : '') + '><summary>' + esc(title) +
-      (count != null ? '<span class="hint" style="margin-left:auto;margin-right:8px">' + count + '</span>' : '') +
+  function acc(title, count, inner, open, unit) {
+    return '<details class="acc"' + (open ? ' open' : '') + '><summary>' +
+      '<span class="acc-t">' + esc(title) + '</span>' +
+      (count != null ? '<span class="acccnt">（' + count + (unit || '条') + '）</span>' : '') +
       '</summary><div class="acc-body">' + inner + '</div></details>';
+  }
+  /* 内容里的序号：01 02 03…（两位数对齐，好扫） */
+  function idx(i) {
+    return '<span class="idx">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>';
   }
 
   /* ---------- 景点与门票待办（勾选状态存本机） ---------- */
@@ -552,9 +557,9 @@
 
     // 一页看懂
     if ((G.onePage || []).length) {
-      h += acc('一页看懂', G.onePage.length, G.onePage.map(function (t) {
-        return '<p>' + esc(t) + '</p>';
-      }).join(''), true);
+      h += acc('一页看懂', G.onePage.length, '<ol class="olist tight">' + G.onePage.map(function (t) {
+        return '<li>' + esc(t) + '</li>';
+      }).join('') + '</ol>', true);
     }
 
     // 预约 + 闹钟
@@ -562,8 +567,8 @@
       var inner = '';
       if ((G.bookings || []).length) {
         inner += '<div class="sec-title" style="margin:0 0 6px">要提前预约 / 买票（' + G.bookings.length + ' 项）</div>';
-        inner += G.bookings.map(function (b) {
-          return '<div class="item"><div class="item-h"><span class="nm">' + esc(b.what) + '</span></div>' +
+        inner += G.bookings.map(function (b, i) {
+          return '<div class="item"><div class="item-h">' + idx(i) + '<span class="nm">' + esc(b.what) + '</span></div>' +
             '<div class="item-b"><span class="lbl">参观：</span>' + esc(b.visitDay) + '　<span class="lbl">最早可约：</span>' + esc(b.earliest) + '</div>' +
             (b.time ? '<div class="item-b"><span class="lbl">放票：</span>' + esc(b.time) + '</div>' : '') +
             (b.channel ? '<div class="item-b"><span class="lbl">渠道：</span>' + esc(b.channel) + '</div>' : '') +
@@ -574,14 +579,14 @@
         inner += '<div class="sec-title" style="margin:14px 0 6px">闹钟（' + G.alarms.length + ' 条）</div>';
         inner += '<ul class="olist">' + G.alarms.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>';
       }
-      h += acc('预约 · 买票 · 闹钟', (G.bookings || []).length + (G.alarms || []).length, inner, true);
+      h += acc('预约 · 买票 · 闹钟', (G.bookings || []).length + (G.alarms || []).length, inner, true, '项');
     }
 
     // 必去榜
     if ((G.mustSee || []).length) {
       var seen = G.mustSee.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
-      h += acc('必去榜', seen.length, seen.map(function (m) {
-        return '<div class="item"><div class="item-h"><span class="nm">' + esc(m.name) + '</span>' + scoreBadge(m) + '</div>' +
+      h += acc('必去榜', seen.length, seen.map(function (m, i) {
+        return '<div class="item"><div class="item-h">' + idx(i) + '<span class="nm">' + esc(m.name) + '</span>' + scoreBadge(m) + '</div>' +
           (m.detail ? '<div class="item-b">' + esc(m.detail) + '</div>' : '') +
           '<div class="acts" style="margin-top:8px">' +
             '<a class="mini pri" href="' + esc(amap(m.name)) + '" target="_blank" rel="noopener">↗ 高德</a>' +
@@ -614,8 +619,8 @@
 
     // 住宿
     if ((G.hotels || []).length) {
-      var inner3 = G.hotels.map(function (x) {
-        return '<div class="item"><div class="item-h"><span class="nm">' + esc(x.name) + '</span>' +
+      var inner3 = G.hotels.map(function (x, i) {
+        return '<div class="item"><div class="item-h">' + idx(i) + '<span class="nm">' + esc(x.name) + '</span>' +
           '<span class="hint">' + esc(x.tier) + '</span></div>' +
           '<div class="item-b"><span class="lbl">地址：</span>' + esc(x.address) +
           '　<span class="lbl">离地铁：</span>' + esc(x.metro) +
@@ -627,18 +632,18 @@
       if ((G.hotelNotes || []).length) {
         inner3 += G.hotelNotes.map(function (t) { return '<p class="muted" style="margin:9px 0;line-height:1.65">' + esc(t) + '</p>'; }).join('');
       }
-      h += acc('已订酒店 · 到店要点', G.hotels.length, inner3);
+      h += acc('已订酒店 · 到店要点', G.hotels.length, inner3, false, '家');
     }
 
     // 预算
     if ((G.budget || []).length) {
       var inner4 = G.budget.map(function (b, i) {
         var last = i === G.budget.length - 1;
-        return '<div class="item" style="display:flex;justify-content:space-between;gap:12px' + (last ? ';' : '') + '">' +
-          '<span style="' + (last ? 'font-weight:700' : 'font-size:14px') + '">' + esc(b.item) + '</span>' +
+        return '<div class="item" style="display:flex;align-items:baseline;justify-content:space-between;gap:12px' + (last ? ';' : '') + '">' +
+          '<span style="' + (last ? 'font-weight:700' : 'font-size:14px') + '">' + (last ? '' : idx(i)) + esc(b.item) + '</span>' +
           '<span style="flex:none;font-weight:' + (last ? '700' : '400') + ';font-variant-numeric:tabular-nums">' + esc(b.amount) + '</span></div>';
       }).join('');
-      h += acc('预算', G.budget.length, inner4);
+      h += acc('预算', G.budget.length, inner4, false, '项');
     }
 
     // 突发情况
