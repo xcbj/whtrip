@@ -112,11 +112,20 @@
       .map(function (f) { return f.p; });
   }
 
+  /* 本地已知版本：优先读缓存里的 version.json，读不到再看 localStorage
+     （清缓存/首次装的过渡期用得上，免得一上来就要重下 2.5MB 媒体） */
   function cachedVer() {
-    if (!window.caches) { return Promise.resolve(null); }
+    var fromLs = function () {
+      try { var t = localStorage.getItem('wh-verj'); return t ? JSON.parse(t) : null; } catch (e) { return null; }
+    };
+    if (!window.caches) { return Promise.resolve(fromLs()); }
     return caches.match(absUrl(VER_FILE), { ignoreSearch: true }).then(function (r) {
-      return r ? r.json() : null;
-    }).catch(function () { return null; });
+      return r ? r.json() : fromLs();
+    }).catch(fromLs);
+  }
+
+  function saveVerLocal(obj) {
+    try { localStorage.setItem('wh-verj', JSON.stringify(obj)); } catch (e) { }
   }
 
   /* 新内容写进所有已存在的缓存（SW 缓存优先，写完立刻生效）
@@ -164,7 +173,7 @@
           }, Promise.resolve()).then(function () {
             var body = new Blob([JSON.stringify(remote)], { type: 'application/json' });
             return putAll(VER_FILE, new Response(body, { headers: { 'Content-Type': 'application/json' } }));
-          }).then(function () { out.ok = true; return out; });
+          }).then(function () { saveVerLocal(remote); out.ok = true; return out; });
         }).catch(function (e) { return next(String((e && e.message) || e)); });
       }
       return next('');

@@ -3,7 +3,7 @@
  *      之后断网/飞行模式也能一键打开、切天、播动图。
  * 改了站内文件 → 把下面的 VERSION 加一，用户下次打开自动换新。
  */
-const VERSION = 'wh-20261104-5db1b986';
+const VERSION = 'wh-20261104-4ee255c9';
 
 const CORE = [
   './',
