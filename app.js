@@ -469,7 +469,9 @@
   }
 
   /* ---------- 景点与门票待办（勾选状态存本机） ---------- */
-  var TK_KEY = 'wh-tk';
+  var TK_KEY = 'wh-tk', TK_COL = 'wh-tkcol', TK_GRP = 'wh-tkgrp';
+  function tkFlag(k, def) { try { var v = localStorage.getItem(k); return v === null ? def : v === '1'; } catch (e) { return def; } }
+  function tkFlagSet(k, on) { try { localStorage.setItem(k, on ? '1' : '0'); } catch (e) { } }
   function tkDone() {
     try { return JSON.parse(localStorage.getItem(TK_KEY) || '{}') || {}; } catch (e) { return {}; }
   }
@@ -504,26 +506,42 @@
         '</details>' +
       '</div></div>';
   }
-  function ticketCard() {
-    var done = tkDone(), n = 0;
-    var rows = G.tickets.map(function (tk) { if (done[tk.what]) n++; return tkRow(tk, done); }).join('');
-    return '<div class="card tkc" id="ticketCard">' +
-      '<div class="tkh"><h2>景点与门票 · 待办</h2><span class="tkcnt" id="tkCnt">' + n + '/' + G.tickets.length + ' 已完成</span></div>' +
-      '<div class="tklist">' + rows + '</div>' +
-      '<div class="tkhint">约完点左边圆圈打勾，勾选状态存在本机；「还剩 N 天」= 距离最早能约那天。</div>' +
+  /* 待办卡：整卡可折叠；完成的收进「已完成」分组（默认折叠），取消完成后按原顺序回到待办列表 */
+  function tkInner(col, grp) {
+    var done = tkDone(), todo = [], fin = [];
+    G.tickets.forEach(function (tk) { (done[tk.what] ? fin : todo).push(tk); });
+    var rows = function (list) {
+      return list.map(function (tk) { return tkRow(tk, done); }).join('');
+    };
+    return '<button class="tkh" data-tkcol="1" aria-expanded="' + (col ? 'false' : 'true') + '">' +
+        '<span class="tkh-t">景点与门票 · 待办</span>' +
+        '<span class="tkcnt" id="tkCnt">' + fin.length + '/' + G.tickets.length + '</span>' +
+        '<span class="tkcaret" aria-hidden="true">▾</span>' +
+      '</button>' +
+      '<div class="tkbody"' + (col ? ' hidden' : '') + '>' +
+        '<div class="tklist" id="tkTodo">' +
+          (todo.length ? rows(todo) : '<div class="tkempty">都办完了 ✓</div>') +
+        '</div>' +
+        (fin.length ? '<div class="tkgrp">' +
+          '<button class="tkgt' + (grp ? ' open' : '') + '" data-tkgrp="1" aria-expanded="' + (grp ? 'true' : 'false') + '">' +
+            '<span class="tkcaret" aria-hidden="true">▾</span>' +
+            '<span>已完成</span><span class="tkgtn">' + fin.length + '</span>' +
+          '</button>' +
+          '<div class="tklist tkfin" id="tkFin"' + (grp ? '' : ' hidden') + '>' + rows(fin) + '</div>' +
+        '</div>' : '') +
+        '<div class="tkhint">点左边圆圈标记完成（再点一次撤销，会回到原来的位置）；「还剩 N 天」= 距离最早能约那天。勾选存本机。</div>' +
       '</div>';
   }
-  function tkRefresh() {
-    var done = tkDone(), n = 0;
-    $$('#ticketCard .tk').forEach(function (row) {
-      var name = row.dataset.tk, d = !!done[name];
-      if (d) n++;
-      row.classList.toggle('done', d);
-      var b = row.querySelector('.tkbox');
-      if (b) b.setAttribute('aria-pressed', d ? 'true' : 'false');
-    });
-    var c = $('#tkCnt');
-    if (c) c.textContent = n + '/' + G.tickets.length + ' 已完成';
+  function ticketCard() {
+    return '<div class="card tkc' + (tkFlag(TK_COL, false) ? ' iscol' : '') + '" id="ticketCard">' +
+      tkInner(tkFlag(TK_COL, false), tkFlag(TK_GRP, false)) + '</div>';
+  }
+  function tkRender() {
+    var el = $('#ticketCard');
+    if (!el) return;
+    var col = el.classList.contains('iscol');
+    var fin = document.getElementById('tkFin');
+    el.innerHTML = tkInner(col, !!(fin && !fin.hidden));
   }
 
   function buildPrep() {
@@ -718,13 +736,28 @@
   }
 
   function setRoute(id, opts) {
-    if (!ROUTES.some(function (r) { return r.id === id; })) id = 'd1';
+    if (!ROUTES.some(function (r) { return r.id === id; })) id = todayRoute();
+    var prev = state.route;
     state.route = id;
     if (!inited.route) { buildRoute(); inited.route = true; }
     else renderRouteCard();
     $$('#daybarRoute .dchip').forEach(function (b) {
-      b.setAttribute('aria-selected', String(b.dataset.rday === id));
+      var on = b.dataset.rday === id;
+      b.setAttribute('aria-selected', String(on));
+      if (on) {
+        var bar = $('#daybarRoute');
+        var left = b.offsetLeft - (bar.clientWidth - b.offsetWidth) / 2;
+        if (left > 0) bar.scrollTo({ left: left, behavior: 'smooth' });
+      }
     });
+    var dir = 1;
+    if (prev && prev !== id) {
+      var seq = ROUTES.map(function (r) { return r.id; });
+      var ai = seq.indexOf(prev), bi = seq.indexOf(id);
+      if (ai >= 0 && bi >= 0) dir = bi > ai ? 1 : -1;
+    }
+    if (opts && opts.dir) dir = opts.dir;
+    if (prev !== id && !(opts && opts.noAnim)) slidePanel($('#routeBody'), dir);
     if (!opts || !opts.noScroll) window.scrollTo(0, 0);
     if (!opts || !opts.noHash) writeHash();
   }
@@ -745,7 +778,7 @@
     if (h.indexOf('route') === 0) {
       setPage('route', { noHash: true });
       var r = h.split('-')[1];
-      setRoute(r || 'd1', { noHash: true });
+      setRoute(r || todayRoute(), { noHash: true, noAnim: firstHash });
       return;
     }
     if (['eat', 'shops', 'prep'].indexOf(h) >= 0) { setPage(h, { noHash: true }); return; }
@@ -769,6 +802,11 @@
   function todayDay(now) {
     var i = tripDayIndex(now || new Date());
     return i >= 0 ? 'D' + (i + 1) : null;
+  }
+  /* 动图页跟行程页用同一套「今天」逻辑：行程期 → 今天那天，否则 D1 */
+  function todayRoute(now) {
+    var d = todayDay(now);
+    return d ? d.toLowerCase() : 'd1';
   }
 
   function initToday() {
@@ -1097,13 +1135,37 @@
     var cp = t.closest && t.closest('[data-copy]');
     if (cp) { e.preventDefault(); copyText(cp.dataset.copy); return; }
 
+    var tkcol = t.closest && t.closest('[data-tkcol]');
+    if (tkcol) {
+      var card = $('#ticketCard');
+      var col = !card.classList.contains('iscol');
+      card.classList.toggle('iscol', col);
+      tkFlagSet(TK_COL, col);
+      var body = card.querySelector('.tkbody');
+      if (body) body.hidden = col;
+      var head = card.querySelector('.tkh');
+      if (head) head.setAttribute('aria-expanded', String(!col));
+      return;
+    }
+    var tkgrp = t.closest && t.closest('[data-tkgrp]');
+    if (tkgrp) {
+      var fl = document.getElementById('tkFin');
+      if (fl) {
+        var hide = !fl.hidden;
+        fl.hidden = hide;
+        tkgrp.setAttribute('aria-expanded', String(!hide));
+        tkgrp.classList.toggle('open', !hide);
+        tkFlagSet(TK_GRP, !hide);
+      }
+      return;
+    }
     var tk = t.closest && t.closest('[data-tktoggle]');
     if (tk) {
       e.preventDefault();
       var name = tk.dataset.tktoggle;
       var on = tk.getAttribute('aria-pressed') !== 'true';
       tkSet(name, on);
-      tkRefresh();
+      tkRender();
       if (on) toast('已标记：' + name + ' 完成');
       return;
     }
@@ -1124,15 +1186,25 @@
 
   // 左右滑动切天：跟手拖动 + 松手切换（面板跟着手指走，到边界有阻力）
   (function () {
-    var sx = 0, sy = 0, on = false, axis = null, panel = null;
+    var sx = 0, sy = 0, on = false, axis = null, panel = null, page = 'plan';
     var main = $('#main');
-    var IGNORE = '.daybar, .searchwrap, video, #shopSearch';
+    var IGNORE = '.daybar, .searchwrap, video, #shopSearch, #lb';
     var MAX = 56;
 
     var PULL_MAX = 76, PULL_ARM = 68, pull = 0, pulling = false;
 
-    function seq() { return G.days.map(function (d) { return d.id; }).concat(['RAIN']); }
-    function cur() { var i = seq().indexOf(state.day); return i < 0 ? 0 : i; }
+    /* 行程页按「天」滑（D1…D4、雨天），动图页按「路线卡」滑（d1…d4、全览、雨天） */
+    function seq() {
+      if (page === 'route') return ROUTES.map(function (r) { return r.id; });
+      return G.days.map(function (d) { return d.id; }).concat(['RAIN']);
+    }
+    function cur() {
+      var i = seq().indexOf(page === 'route' ? state.route : state.day);
+      return i < 0 ? 0 : i;
+    }
+    function pagePanel() {
+      return page === 'route' ? $('#routeBody') : $('.day-panel:not([hidden])');
+    }
     function reset(el, animate) {
       if (!el) { return; }
       el.classList.remove('dragging');
@@ -1146,11 +1218,12 @@
     }
 
     main.addEventListener('touchstart', function (e) {
-      if (e.touches.length !== 1 || state.page !== 'plan') { on = false; return; }
+      page = state.page;
+      if (e.touches.length !== 1 || (page !== 'plan' && page !== 'route')) { on = false; return; }
       if (e.target.closest(IGNORE)) { on = false; return; }
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
       axis = null; on = true; pulling = false; pull = 0;
-      panel = $('.day-panel:not([hidden])');
+      panel = pagePanel();
     }, { passive: true });
 
     main.addEventListener('touchmove', function (e) {
@@ -1204,7 +1277,8 @@
       var ni = fdx < 0 ? i + 1 : i - 1;
       if (ni < 0 || ni >= arr.length) { reset(el, true); return; }
       if (el) { el.classList.remove('dragging'); el.style.transform = ''; }
-      setDay(arr[ni], { dir: fdx < 0 ? 1 : -1 });
+      if (page === 'route') setRoute(arr[ni], { dir: fdx < 0 ? 1 : -1 });
+      else setDay(arr[ni], { dir: fdx < 0 ? 1 : -1 });
     }, { passive: true });
 
     main.addEventListener('touchcancel', function () {
@@ -1227,6 +1301,7 @@
       if (d && d !== state.day) {
         setPage('plan');
         setDay(d);
+        setRoute(d.toLowerCase(), { noHash: true });
         toast('已经 ' + d + ' 了，已切到当天');
       }
       initToday();
@@ -1245,6 +1320,7 @@
   buildDays();
   buildIntro();
   setDay(todayDay() || 'D1', { noHash: true, noAnim: true }); // 打开就在行程期 → 直接选中今天；否则 D1
+  setRoute(todayRoute(), { noHash: true, noAnim: true });     // 动图页同一套逻辑
   initToday();
   applyHash();
   firstHash = false;
@@ -1256,7 +1332,7 @@
     }
   } catch (e) { }
 
-  window.__APP__ = { setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, todayDay: todayDay, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state };
+  window.__APP__ = { tkRender: tkRender, setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, todayDay: todayDay, todayRoute: todayRoute, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state };
 
   /* =========================================================
      Service Worker（GitHub Pages 上才生效）
