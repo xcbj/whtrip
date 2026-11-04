@@ -5,7 +5,7 @@
  * 其余行程在你打开它的时候按需缓存（打开后 shell 还会发 PREFETCH 补全）。
  * 改了站内文件 → tools/release.mjs 会自动改下面的 VERSION 和两张清单。
  */
-const VERSION = 'trips-20261104-feefc252';
+const VERSION = 'trips-20261104-6a2c9316';
 
 const CORE = [
   './',

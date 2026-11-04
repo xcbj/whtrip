@@ -68,14 +68,28 @@
     if (t.counts && t.counts.food) { kv.push('🍜 ' + t.counts.food + ' 家吃'); }
     if (t.counts && t.counts.shops) { kv.push('🔍 ' + t.counts.shops + ' 家店'); }
     if (t.counts && t.counts.tickets) { kv.push('🧳 ' + t.counts.tickets + ' 项待办'); }
+    // 封面图（trip.json 的 cover）：有图就当缩略图，没图退回 emoji 方块
+    var head = t.cover
+      ? '<span class="tc-thumb" aria-hidden="true" style="background-image:url(\'' + esc(t.cover) + '\')">' +
+        '<span class="tc-badge">' + esc(t.emoji || '📍') + '</span></span>'
+      : '<span class="tc-emoji" aria-hidden="true">' + esc(t.emoji || '📍') + '</span>';
+    var tags = (t.tags && t.tags.length)
+      ? '<span class="tc-tags">' + t.tags.map(function (x) {
+          return '<span class="tc-tag">' + esc(x) + '</span>';
+        }).join('') + '</span>'
+      : '';
+    var find = [t.title, t.city, t.summary, (t.tags || []).join(' '),
+      (t.days || []).map(function (d) { return d.title; }).join(' ')].join(' ').toLowerCase();
     return '<a class="tcard" href="#' + esc(t.id) + '" data-trip="' + esc(t.id) + '"' +
+      ' data-find="' + esc(find) + '" data-tags="|' + esc((t.tags || []).join('|')) + '|"' +
       ' style="--accent:' + esc(t.accent || '#1a73e8') + '">' +
-      '<span class="tc-emoji" aria-hidden="true">' + esc(t.emoji || '📍') + '</span>' +
+      head +
       '<span class="tc-main">' +
         '<span class="tc-top"><b>' + esc(t.title || t.city) + '</b>' +
           '<i class="tc-state ' + st.cls + '">' + esc(st.text) + '</i></span>' +
         '<span class="tc-date">' + esc(dateLabel(t)) + '</span>' +
         (t.summary ? '<span class="tc-sum">' + esc(t.summary) + '</span>' : '') +
+        tags +
         '<span class="tc-kv">' + kv.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</span>' +
       '</span>' +
       '<span class="tc-go" aria-hidden="true">›</span>' +
@@ -120,18 +134,80 @@
     if (!trips.length) {
       html = '<p class="hempty">还没有行程。加一趟：在项目里建 <code>trips/&lt;id&gt;/trip.json</code>，' +
         '再跑 <code>./tools/deploy.sh</code>。</p>';
+    } else {
+      // 趟数多起来才给搜索/标签筛选，一两趟时不碍眼
+      var tagSet = [];
+      trips.forEach(function (t) {
+        (t.tags || []).forEach(function (x) { if (tagSet.indexOf(x) < 0) { tagSet.push(x); } });
+      });
+      var filtering = trips.length >= 4;
+      if (filtering) {
+        html = '<div class="hfilter">' +
+            '<label class="hsearch"><span aria-hidden="true">🔍</span>' +
+            '<input id="hq" type="search" inputmode="search" autocomplete="off" ' +
+            'placeholder="搜城市 / 景点 / 关键词"></label></div>' +
+          (tagSet.length ? '<div class="htags" id="htags">' +
+            '<button class="htag" data-tag="" aria-pressed="true">全部</button>' +
+            tagSet.map(function (x) {
+              return '<button class="htag" data-tag="' + esc(x) + '" aria-pressed="false">' + esc(x) + '</button>';
+            }).join('') + '</div>' : '') +
+          html +
+          '<p class="hnomatch" id="hnomatch" hidden>没有匹配的行程</p>';
+      }
     }
     $('#homeBody').innerHTML = html;
+    if ($('#hq')) { wireFilter(); }
 
     var foot = $('#homeFoot');
     foot.hidden = false;
     foot.innerHTML = '<button class="btn ghost" id="homeUpd">检查更新</button>' +
       '<span class="hint">' + (manifestTime ? '内容更新于 ' + esc(manifestTime) + ' · ' : '') +
-      'Wi-Fi 下点一下换成最新版</span>';
+      '点一下换成最新版 · 流量也行，不用代理</span>';
     var b = $('#homeUpd');
     if (b) {
       b.addEventListener('click', function () {
         if (UPD.hardRefresh) { UPD.hardRefresh(); } else { location.reload(); }
+      });
+    }
+  }
+
+  /* 首页搜索 / 标签筛选（只在行程较多时出现） */
+  function wireFilter() {
+    var q = $('#hq'), tags = $('#htags'), nm = $('#hnomatch');
+    var curTag = '';
+    function apply() {
+      var s = (q && q.value || '').trim().toLowerCase();
+      var shown = 0;
+      $$('.tcard', $('#homeBody')).forEach(function (c) {
+        var hit = (!s || (c.dataset.find || '').indexOf(s) >= 0) &&
+                  (!curTag || (c.dataset.tags || '').indexOf('|' + curTag + '|') >= 0);
+        c.hidden = !hit;
+        if (hit) { shown++; }
+      });
+      $$('.hcards', $('#homeBody')).forEach(function (box) {
+        var shown = 0;
+        $$('.tcard', box).forEach(function (c) { if (!c.hidden) { shown++; } });
+        var sec = box.closest ? box.closest('.hgroup') : null;
+        if (sec) {
+          sec.hidden = !shown;
+          var cnt = $('.hcnt', sec);
+          if (cnt) { cnt.textContent = shown; }
+        }
+      });
+      var pastBox = $('.hpast', $('#homeBody'));
+      if (pastBox && (s || curTag)) { pastBox.open = true; }
+      if (nm) { nm.hidden = shown > 0; }
+    }
+    if (q) { q.addEventListener('input', apply); }
+    if (tags) {
+      tags.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.htag') : null;
+        if (!b) { return; }
+        curTag = b.dataset.tag || '';
+        $$('.htag', tags).forEach(function (x) {
+          x.setAttribute('aria-pressed', String((x.dataset.tag || '') === curTag));
+        });
+        apply();
       });
     }
   }

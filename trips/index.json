@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-11-04T09:02:00.022Z",
+ "builtAt": "2026-11-04T10:08:22.083Z",
  "trips": [
   {
    "id": "wuhan-2026-11",
@@ -13,7 +13,13 @@
    "dateLabel": "2026.11.12—11.15",
    "emoji": "🏯",
    "accent": "#c8372d",
-   "cover": "assets/img/overview.jpg",
+   "tags": [
+    "亲子",
+    "美食",
+    "博物馆",
+    "城市漫步"
+   ],
+   "cover": "",
    "assetBase": "assets/",
    "mapCity": "武汉",
    "features": [

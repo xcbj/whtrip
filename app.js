@@ -604,6 +604,12 @@
       h += acc('下雨 / 累了 / 想加点 · 换方案', G.alternatives.length, inner5);
     }
 
+    // 打印 / 存成 PDF
+    h += '<div class="card" style="margin-top:14px"><h3>打印 / 存成 PDF</h3>' +
+      '<p class="muted" style="margin:0 0 10px;line-height:1.6">把整趟排成一份干净的清单（每天行程 + 吃什么 + 速查 + 避坑）。' +
+      'iPhone：生成后 → 分享面板里选「打印」→ 预览页双指放大 → 右上角「存储为 PDF」。</p>' +
+      '<button class="btn ghost wide" data-print="1">生成打印版</button></div>';
+
     // 检查更新（独立 App 模式没有浏览器的下拉刷新）
     h += '<div class="card" style="margin-top:14px"><h3>检查更新</h3>' +
       '<p class="muted" style="margin:0 0 10px;line-height:1.6">在内容区从顶部往下拖也能刷新。<br>' +
@@ -620,6 +626,129 @@
       var el = document.getElementById('verNow');
       if (el) { el.textContent = (v && v.v) ? v.v : '未知（下次刷新时写入）'; }
     });
+  }
+
+  /* =========================================================
+     打印 / 存 PDF：把整趟行程排成一份不依赖界面的干净文档
+     （只在 @media print 里显示，平时 #printDoc 是 display:none）
+     ========================================================= */
+  function plist(arr) {
+    arr = arr || [];
+    if (!arr.length) { return ''; }
+    return '<ul>' + arr.map(function (x) {
+      return '<li>' + esc(typeof x === 'string' ? x : (x.title || x.name || '')) + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function buildPrintDoc() {
+    var meta = G.meta || {};
+    var h = '<h1>' + esc(CFG.title || CFG.city || '行程') + '</h1>' +
+      '<p class="pr-sub">' + esc(CFG.dateLabel || '') +
+      ((G.days || []).length ? ' · ' + G.days.length + ' 天' : '') +
+      (meta.builtAt ? ' · 生成于 ' + esc(String(meta.builtAt).slice(0, 10)) : '') + '</p>';
+
+    if ((G.onePage || []).length) {
+      h += '<h2>一页看懂</h2><ul>' + G.onePage.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+    }
+
+    (G.days || []).forEach(function (d) {
+      h += '<h2>' + esc(d.id) + ' · ' + esc(d.date || '') + ' ' + esc(d.weekday || '') +
+        (d.title ? ' · ' + esc(d.title) : '') + '</h2>';
+      (d.rows || []).forEach(function (r) {
+        h += '<div class="pr-row"><span class="pr-time">' + esc(r.time || '') + '</span>　<b>' + esc(r.title || '') + '</b>' +
+          (r.note ? '<div class="pr-note">' + esc(r.note) + '</div>' : '') + '</div>';
+      });
+      if ((d.transit || []).length) { h += '<h3>怎么走</h3>' + plist(d.transit); }
+      if ((d.notices || []).length) { h += '<h3>备注</h3>' + plist(d.notices); }
+    });
+
+    var eat = '';
+    if ((G.mealSlots || []).length) {
+      eat += '<h3>每顿正经饭</h3>';
+      G.mealSlots.forEach(function (m) {
+        eat += '<div class="pr-row"><b>' + esc(m.day || '') + ' · ' + esc(m.scene || '') + '</b>' +
+          '<div>' + esc(m.first || '') + '</div>' +
+          ((m.alternatives || []).length ? '<div class="pr-note">备选：' + esc(m.alternatives.join('；')) + '</div>' : '') +
+          (m.tip ? '<div class="pr-note">' + esc(m.tip) + '</div>' : '') + '</div>';
+      });
+    }
+    if ((G.food || []).length) {
+      eat += '<h3>值得吃的（' + G.food.length + ' 家）</h3>' +
+        '<table><tr><th>吃什么</th><th>评分</th><th>去哪</th><th>要点</th></tr>' +
+        G.food.map(function (f) {
+          return '<tr><td><b>' + esc(f.name) + '</b></td><td>' + esc(f.note || '') + '</td><td>' +
+            esc(f.where || '') + '</td><td>' + esc(f.tip || '') + '</td></tr>';
+        }).join('') + '</table>';
+    }
+    if ((G.snackNotes || []).length) { eat += plist(G.snackNotes); }
+    if (eat) { h += '<h2>吃</h2>' + eat; }
+
+    var qk = '';
+    if ((G.tickets || []).length) {
+      qk += '<h3>要提前预约 / 买票</h3><table><tr><th>项</th><th>参观</th><th>最早可约</th><th>渠道</th></tr>' +
+        G.tickets.map(function (t) {
+          return '<tr><td><b>' + esc(t.what) + '</b></td><td>' + esc(t.day || '') + '</td><td>' +
+            esc(t.earliest || '') + '</td><td>' + esc(t.channel || '') + '</td></tr>';
+        }).join('') + '</table>';
+    }
+    if ((G.alarms || []).length) { qk += '<h3>闹钟</h3>' + plist(G.alarms); }
+    if ((G.hotels || []).length) {
+      qk += '<h3>住</h3>';
+      G.hotels.forEach(function (x) {
+        qk += '<div class="pr-row"><b>' + esc(x.name || '') + '</b>' +
+          (x.address ? '<div>' + esc(x.address) + '</div>' : '') +
+          (x.metro ? '<div class="pr-note">' + esc(x.metro) + '</div>' : '') +
+          (x.tip ? '<div class="pr-note">' + esc(x.tip) + '</div>' : '') + '</div>';
+      });
+    }
+    if ((G.budget || []).length) {
+      qk += '<h3>预算</h3><table>' + G.budget.map(function (b) {
+        return '<tr><td>' + esc(b.item) + '</td><td>' + esc(b.amount) + '</td></tr>';
+      }).join('') + '</table>';
+    }
+    if ((G.clothing || []).length) { qk += '<h3>穿什么</h3>' + plist(G.clothing); }
+    if ((G.meds || []).length) { qk += '<h3>药</h3>' + plist(G.meds); }
+    if ((G.rainTransit || []).length) { qk += '<h3>雨天怎么走</h3>' + plist(G.rainTransit); }
+    if ((G.alternatives || []).length) {
+      qk += '<h3>换方案</h3>' + G.alternatives.map(function (a) {
+        return '<div class="pr-row"><b>' + esc(a.case) + '</b>：' + esc(a.plan) + '</div>';
+      }).join('');
+    }
+    if (qk) { h += '<h2>速查</h2>' + qk; }
+
+    if ((G.pitfalls || []).length) {
+      h += '<h2>避坑</h2><ol>' + G.pitfalls.map(function (p) {
+        return '<li><b>' + esc(p.wrong || '') + '</b> → ' + esc(p.right || '') + '</li>';
+      }).join('') + '</ol>';
+    }
+
+    h += '<p class="pr-sub" style="margin-top:6mm">资料来源：' + esc(meta.source || '') +
+      ' · 价格 / 营业时间以当日为准</p>';
+
+    var box = document.getElementById('printDoc');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'printDoc';
+      document.body.appendChild(box);
+    }
+    box.innerHTML = h;
+    return box;
+  }
+
+  function printTrip() {
+    var box = buildPrintDoc();
+    var done = false;
+    function cleanup() {
+      if (done) { return; }
+      done = true;
+      window.removeEventListener('afterprint', cleanup);
+      box.innerHTML = '';
+    }
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(function () {
+      try { window.print(); } catch (e) { toast('这台设备不能直接打印'); cleanup(); }
+    }, 80);
+    setTimeout(cleanup, 60000);   // 兜底：不支持 afterprint 的浏览器一分钟后再清
   }
 
   /* =========================================================
@@ -1100,6 +1229,9 @@
     var rf = t.closest && t.closest('[data-refresh]');
     if (rf) { hardRefresh(); return; }
 
+    var pr = t.closest && t.closest('[data-print]');
+    if (pr) { printTrip(); return; }
+
     var cp = t.closest && t.closest('[data-copy]');
     if (cp) { e.preventDefault(); copyText(cp.dataset.copy); return; }
 
@@ -1306,7 +1438,7 @@
   window.__APP__ = {
     tkRender: tkRender, setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh,
     todayDay: todayDay, todayRoute: todayRoute, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state,
-    cfg: CFG, has: HAS,
+    cfg: CFG, has: HAS, printDoc: buildPrintDoc, printTrip: printTrip,
     mirrors: UPD.MIRRORS, planChanges: UPD.planChanges, mirrorUpdate: UPD.mirrorUpdate, cachedVer: UPD.cachedVer
   };
   /* Service Worker 由 shell.js 注册（首页也要能装上）。 */
