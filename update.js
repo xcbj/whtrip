@@ -101,18 +101,61 @@ function saveVerLocal(obj) {
   try { localStorage.setItem('wh-verj', JSON.stringify(obj)); } catch (e) { }
 }
 
+/* 镜像服务器把 .html 当 text/plain 发（jsDelivr、raw.githubusercontent 都这样），
+   原样塞进缓存 → Safari 会把网页当源码显示。写缓存前一律按扩展名重贴
+   Content-Type，别信镜像给的。 */
+var MIME = {
+  html: 'text/html; charset=utf-8',
+  htm: 'text/html; charset=utf-8',
+  css: 'text/css; charset=utf-8',
+  js: 'text/javascript; charset=utf-8',
+  mjs: 'text/javascript; charset=utf-8',
+  json: 'application/json; charset=utf-8',
+  webmanifest: 'application/manifest+json; charset=utf-8',
+  txt: 'text/plain; charset=utf-8',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  ico: 'image/x-icon',
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  webm: 'video/webm',
+  pdf: 'application/pdf'
+};
+function mimeOf(p) {
+  var m = /\.([a-z0-9]+)$/i.exec(String(p).replace(/[?#].*$/, ''));
+  return (m && MIME[m[1].toLowerCase()]) || 'application/octet-stream';
+}
+/* 拿回来的其实是错误页（200 但发的是 HTML，比如 404 页）：要拒收 */
+function badType(p, res) {
+  var want = mimeOf(p).split(';')[0];
+  var got = String(res.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+  if (!got || want === 'text/html') { return false; }   // html 本来就被当 text/plain 发
+  return got === 'text/html';
+}
+function reType(p, res) {
+  return res.blob().then(function (b) {
+    return new Response(b, { status: 200, headers: { 'Content-Type': mimeOf(p) } });
+  });
+}
+
 /* 新内容写进所有已存在的缓存（SW 缓存优先，写完立刻生效）
    注意 index.html 还要覆盖 './' 这个键：直接访问站点根目录时命中的是它。 */
 function putAll(p, res) {
   var keys = [absUrl(p)];
   if (p === 'index.html') { keys.push(absUrl('./')); }
   if (!window.caches) { return Promise.resolve(); }
-  return caches.keys().then(function (list) {
-    return Promise.all(list.map(function (name) {
-      return caches.open(name).then(function (c) {
-        return Promise.all(keys.map(function (k) { return c.put(k, res.clone()); }));
-      });
-    }));
+  return reType(p, res).then(function (fixed) {
+    return caches.keys().then(function (list) {
+      return Promise.all(list.map(function (name) {
+        return caches.open(name).then(function (c) {
+          return Promise.all(keys.map(function (k) { return c.put(k, fixed.clone()); }));
+        });
+      }));
+    });
   });
 }
 
@@ -158,6 +201,7 @@ function mirrorUpdate(o) {
         return chain.then(function () {
           return fetchT(pick.base + p + '?t=' + Date.now(), o.fileTimeout || 25000).then(function (r) {
             if (!r.ok) { throw new Error(p + ' HTTP ' + r.status); }
+            if (badType(p, r)) { throw new Error(p + ' 拿回的是网页/错误页'); }
             return putAll(p, r);
           });
         });
@@ -264,6 +308,7 @@ function legacyCopy(t, done) {
   return {
     toast: toast, copyText: copyText, setPull: setPull, pullBusy: pullBusy,
     hardRefresh: hardRefresh, mirrorUpdate: mirrorUpdate, cachedVer: cachedVer,
-    planChanges: planChanges, MIRRORS: MIRRORS
+    planChanges: planChanges, MIRRORS: MIRRORS,
+    putAll: putAll, mimeOf: mimeOf   // 给 tools/test_mirror.js 复现/回归用
   };
 })();

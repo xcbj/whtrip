@@ -5,7 +5,7 @@
  * 其余行程在你打开它的时候按需缓存（打开后 shell 还会发 PREFETCH 补全）。
  * 改了站内文件 → tools/release.mjs 会自动改下面的 VERSION 和两张清单。
  */
-const VERSION = 'trips-20261104-6a2c9316';
+const VERSION = 'trips-20261104-4f8480c0';
 
 const CORE = [
   './',
@@ -106,6 +106,30 @@ async function ranged(req, cached) {
   });
 }
 
+/* 缓存里的首页必须真的是 HTML，否则宁可给一张自救页（别让 Safari 显示源码） */
+function isNavigate(req) {
+  if (req.mode === 'navigate') { return true; }
+  try { if (/\.html?$/i.test(new URL(req.url).pathname)) { return true; } } catch (e) { }
+  return (req.headers.get('accept') || '').indexOf('text/html') >= 0;
+}
+function isHtmlRes(r) {
+  const ct = (r.headers.get('Content-Type') || '').toLowerCase();
+  return !ct || ct.indexOf('text/html') === 0;
+}
+function rescuePage() {
+  const html = '<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>旅行攻略</title><body style="font:16px/1.7 -apple-system,sans-serif;padding:24px">'
+    + '<h1 style="font-size:20px">缓存出了点问题</h1>'
+    + '<p>联网后重新打开本页即可自动修复；如果还是这样，设置 → Safari → 高级 → 网站数据，'
+    + '删掉本站数据再打开一次。</p></body></html>';
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+async function shellHtml() {
+  const shell = await caches.match('./index.html', { ignoreSearch: true });
+  return shell && isHtmlRes(shell) ? shell : rescuePage();
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
@@ -114,7 +138,11 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return;   // 外链（高德/苹果地图）交给浏览器
 
   e.respondWith((async () => {
-    const cached = await caches.match(req, { ignoreSearch: true });
+    const hit = await caches.match(req, { ignoreSearch: true });
+
+    /* 缓存里的首页被污染过（镜像把 .html 当 text/plain 发过，见 update.js），
+       Safari 会把网页当源码显示 —— 这种命中当没命中，直接回源。 */
+    const cached = (hit && (!isNavigate(req) || isHtmlRes(hit))) ? hit : null;
 
     if (cached) {
       if (req.headers.has('range')) {
@@ -124,8 +152,8 @@ self.addEventListener('fetch', (e) => {
     }
 
     // 页面导航：断网时兜底到缓存里的首页
-    if (req.mode === 'navigate') {
-      const shell = await caches.match('./index.html', { ignoreSearch: true });
+    if (isNavigate(req)) {
+      const shell = await shellHtml();
       if (shell) return shell;
     }
 
@@ -139,7 +167,7 @@ self.addEventListener('fetch', (e) => {
       return res;
     } catch (err) {
       if (url.pathname.endsWith('/') || url.pathname.endsWith('.html')) {
-        const shell = await caches.match('./index.html', { ignoreSearch: true });
+        const shell = await shellHtml();
         if (shell) return shell;
       }
       throw err;
