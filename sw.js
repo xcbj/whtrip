@@ -5,7 +5,7 @@
  * 其余行程在你打开它的时候按需缓存（打开后 shell 还会发 PREFETCH 补全）。
  * 改了站内文件 → tools/release.mjs 会自动改下面的 VERSION 和两张清单。
  */
-const VERSION = 'trips-20261104-4f8480c0';
+const VERSION = 'trips-20261104-baedd5a6';
 
 const CORE = [
   './',
@@ -137,8 +137,11 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // 外链（高德/苹果地图）交给浏览器
 
+  // 应急通道：网址后面加 ?fresh=1 就跳过缓存直取网络（缓存脏了用它自救）
+  const bypass = url.searchParams.has('fresh');
+
   e.respondWith((async () => {
-    const hit = await caches.match(req, { ignoreSearch: true });
+    const hit = bypass ? null : await caches.match(req, { ignoreSearch: true });
 
     /* 缓存里的首页被污染过（镜像把 .html 当 text/plain 发过，见 update.js），
        Safari 会把网页当源码显示 —— 这种命中当没命中，直接回源。 */
@@ -152,7 +155,7 @@ self.addEventListener('fetch', (e) => {
     }
 
     // 页面导航：断网时兜底到缓存里的首页
-    if (isNavigate(req)) {
+    if (isNavigate(req) && !bypass) {
       const shell = await shellHtml();
       if (shell) return shell;
     }
@@ -160,7 +163,7 @@ self.addEventListener('fetch', (e) => {
     try {
       const res = await fetch(req);
       // 顺手把没预缓存到的行程内容/媒体存下来，下次离线就有
-      if (res && res.ok && ASSET_RE.test(url.pathname)) {
+      if (res && res.ok && (bypass || ASSET_RE.test(url.pathname))) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => { });
       }
