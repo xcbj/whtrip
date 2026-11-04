@@ -77,10 +77,12 @@
      （国内多数网络可直连、带 CORS），把 version.json 与变更文件直接写进本机
      缓存再重载，全程不碰 github.io。 */
   var MIRRORS = [
-    'https://cdn.jsdelivr.net/gh/xcbj/whtrip@main/',
+    'https://raw.githack.com/xcbj/whtrip/main/',              // 缓存只 60 秒 → 永远最新
+    'https://cdn.jsdelivr.net/gh/xcbj/whtrip@main/',          // 稳、快，但 @main 会缓存 12 小时
     'https://fastly.jsdelivr.net/gh/xcbj/whtrip@main/',
     'https://gcore.jsdelivr.net/gh/xcbj/whtrip@main/',
-    'https://testingcf.jsdelivr.net/gh/xcbj/whtrip@main/'
+    'https://testingcf.jsdelivr.net/gh/xcbj/whtrip@main/',
+    'https://raw.githubusercontent.com/xcbj/whtrip/main/'     // 有代理时最原始的口子
   ];
   var VER_FILE = 'version.json';
 
@@ -143,40 +145,60 @@
     });
   }
 
+  /* 逐个探镜像：拿到各自的 version.json（并带回 t 时间戳） */
+  function probeMirror(base, ms) {
+    return fetchT(base + VER_FILE + '?t=' + Date.now(), ms).then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.json();
+    }).then(function (j) {
+      if (badVer(j)) { throw new Error('清单损坏'); }
+      return { base: base, ver: j };
+    });
+  }
+
+  /* 并行问所有镜像，取「构建时间最新」的那份清单再下载。
+     之所以并行比较：jsDelivr 的 @main 有 12 小时边缘缓存，刚推完可能还是旧的；
+     raw.githack 只有 60 秒缓存。取最新的一份，就不会被慢的那个骗到。 */
   function mirrorUpdate(o) {
     o = o || {};
-    var out = { ok: false, mirror: '', local: '', remote: '', changed: [], err: '' };
-    var i = 0;
+    var out = { ok: false, mirror: '', local: '', remote: '', changed: [], probed: [], err: '' };
     return cachedVer().then(function (local) {
       out.local = (local && local.v) || '';
-      function next(lastErr) {
-        if (i >= MIRRORS.length) { out.err = lastErr || 'no mirror'; return out; }
-        var base = MIRRORS[i++];
-        return fetchT(base + VER_FILE + '?t=' + Date.now(), o.timeout || 4500).then(function (r) {
-          if (!r.ok) { throw new Error('HTTP ' + r.status); }
-          return r.json();
-        }).then(function (remote) {
-          if (badVer(remote)) { throw new Error('版本清单损坏'); }
-          var todo = planChanges(remote, local);
-          if (todo === null) { throw new Error('版本清单损坏'); }
-          out.mirror = base;
-          out.remote = remote.v;
-          out.changed = todo;
-          if (!todo.length || o.planOnly) { out.ok = true; return out; }
-          return todo.reduce(function (chain, p) {
-            return chain.then(function () {
-              return fetchT(base + p + '?t=' + Date.now(), o.fileTimeout || 25000).then(function (r) {
-                if (!r.ok) { throw new Error(p + ' HTTP ' + r.status); }
-                return putAll(p, r);
-              });
+      return Promise.all(MIRRORS.map(function (base) {
+        return probeMirror(base, o.timeout || 4500).catch(function (e) {
+          out.probed.push(base + ' ✗ ' + String((e && e.message) || e));
+          return null;
+        });
+      })).then(function (list) {
+        var good = list.filter(function (x) { return !!x; });
+        good.forEach(function (g) { out.probed.push(g.base + ' → ' + g.ver.v); });
+        if (!good.length) { out.err = '所有镜像都不通'; return out; }
+        good.sort(function (a, b) {
+          return String(b.ver.t || '').localeCompare(String(a.ver.t || ''));
+        });
+        var pick = good[0];
+        out.mirror = pick.base;
+        out.remote = pick.ver.v;
+        var todo = planChanges(pick.ver, local);
+        if (todo === null) { out.err = '清单损坏'; return out; }
+        out.changed = todo;
+        if (!todo.length || o.planOnly) { out.ok = true; return out; }
+        return todo.reduce(function (chain, p) {
+          return chain.then(function () {
+            return fetchT(pick.base + p + '?t=' + Date.now(), o.fileTimeout || 25000).then(function (r) {
+              if (!r.ok) { throw new Error(p + ' HTTP ' + r.status); }
+              return putAll(p, r);
             });
-          }, Promise.resolve()).then(function () {
-            var body = new Blob([JSON.stringify(remote)], { type: 'application/json' });
-            return putAll(VER_FILE, new Response(body, { headers: { 'Content-Type': 'application/json' } }));
-          }).then(function () { saveVerLocal(remote); out.ok = true; return out; });
-        }).catch(function (e) { return next(String((e && e.message) || e)); });
-      }
-      return next('');
+          });
+        }, Promise.resolve()).then(function () {
+          var body = new Blob([JSON.stringify(pick.ver)], { type: 'application/json' });
+          return putAll(VER_FILE, new Response(body, { headers: { 'Content-Type': 'application/json' } }));
+        }).then(function () {
+          saveVerLocal(pick.ver);
+          out.ok = true;
+          return out;
+        });
+      });
     });
   }
 
@@ -237,7 +259,11 @@
         reloadWith('已从镜像更新（' + r.changed.length + ' 个文件）');
         return;
       }
-      if (r && r.ok) { stop('已是最新版本'); return; }
+      if (r && r.ok) {
+        var down = (r.probed || []).filter(function (x) { return x.indexOf('✗') > 0; }).length;
+        stop(down ? '已是最新（' + down + ' 个镜像不通，可能还没同步）' : '已是最新版本');
+        return;
+      }
       fallbackGh();
     }, fallbackGh);
   }
