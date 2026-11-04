@@ -7,98 +7,113 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="武汉攻略">
+<meta name="apple-mobile-web-app-title" content="旅行攻略">
 <meta name="format-detection" content="telephone=no">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1114">
-<title>武汉四天三晚亲子游 · 11.12—11.15</title>
+<title>旅行攻略</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 </head>
-<body>
+<body class="mode-home">
 
 <!-- 下拉刷新指示条（独立 App 模式没有浏览器自带的下拉刷新） -->
 <div id="pull" aria-hidden="true"><span class="pi">↓</span><span class="pt">下拉刷新</span></div>
 
 <header class="topbar">
+  <button class="tb-back" id="tbBack" aria-label="全部行程" hidden>‹<span>全部</span></button>
   <div class="tb-main">
-    <h1>武汉 · 四天三晚</h1>
-    <span class="tb-sub" id="tbSub">2026.11.12—11.15</span>
+    <h1 id="tbTitle">旅行攻略</h1>
+    <span class="tb-sub" id="tbSub"></span>
   </div>
   <button class="today-btn" id="todayBtn" hidden>今日</button>
 </header>
 
-<!-- 行程页的日期分段控件（sticky，跟着 topbar 下面） -->
-<div class="daybar" id="daybar" data-for="plan">
-  <div class="daybar-scroll" id="daybarPlan"></div>
-</div>
-
-<main id="main">
-
-  <!-- ========== 行程 ========== -->
-  <section class="page" id="page-plan">
-    <details class="intro">
-      <summary>行程说明 · 交通/预约/动图怎么用</summary>
-      <div class="intro-body" id="introBody"></div>
-    </details>
-    <div id="dayPanels"></div>
-  </section>
-
-  <!-- ========== 动图 ========== -->
-  <section class="page" id="page-route" hidden>
-    <div class="daybar daybar-inline">
-      <div class="daybar-scroll" id="daybarRoute"></div>
-    </div>
-    <div id="routeBody"></div>
-  </section>
-
-  <!-- ========== 吃 ========== -->
-  <section class="page" id="page-eat" hidden>
-    <div id="eatBody"></div>
-  </section>
-
-  <!-- ========== 速查 ========== -->
-  <section class="page" id="page-shops" hidden>
-    <div class="searchwrap">
-      <input id="shopSearch" type="search" inputmode="search" placeholder="搜店名 / 用途 / 区域，如「湖锦」「过早」" autocomplete="off">
-    </div>
-    <div id="shopsBody"></div>
-  </section>
-
-  <!-- ========== 准备 ========== -->
-  <section class="page" id="page-prep" hidden>
-    <div id="prepBody"></div>
-  </section>
-
-</main>
-
-<nav class="tabbar" id="tabbar" role="tablist">
-  <button class="tab" data-page="plan" role="tab" aria-selected="true"><span class="ti">🗓</span><span class="tl">行程</span></button>
-  <button class="tab" data-page="route" role="tab" aria-selected="false"><span class="ti">🗺</span><span class="tl">动图</span></button>
-  <button class="tab" data-page="eat" role="tab" aria-selected="false"><span class="ti">🍜</span><span class="tl">吃</span></button>
-  <button class="tab" data-page="shops" role="tab" aria-selected="false"><span class="ti">🔍</span><span class="tl">速查</span></button>
-  <button class="tab" data-page="prep" role="tab" aria-selected="false"><span class="ti">🧳</span><span class="tl">准备</span></button>
-</nav>
-
-<div class="lb" id="lb" hidden>
-  <div class="lb-bar">
-    <div class="lb-tabs" id="lbTabs"></div>
-    <button class="lb-close" id="lbClose" aria-label="关闭">✕</button>
+<!-- ==================== 首页：行程列表 ==================== -->
+<section class="home" id="home">
+  <div class="home-hero">
+    <h2>旅行攻略</h2>
+    <p class="home-sub" id="homeSub">正在读取…</p>
   </div>
-  <div class="lb-stage" id="lbStage">
-    <video id="lbVideo" playsinline webkit-playsinline loop muted controls disablepictureinpicture></video>
-    <img id="lbImg" alt="路线图" hidden>
+  <div id="homeBody"></div>
+  <p class="home-foot" id="homeFoot" hidden></p>
+</section>
+
+<!-- ==================== 行程内（由 shell.js 挂载） ==================== -->
+<div id="trip" hidden>
+
+  <!-- 行程页的日期分段控件（sticky，跟着 topbar 下面） -->
+  <div class="daybar" id="daybar" data-for="plan">
+    <div class="daybar-scroll" id="daybarPlan"></div>
   </div>
-  <div class="lb-tip" id="lbTip">双指放大 · 双击放大/复位 · 单指拖动</div>
+
+  <main id="main">
+
+    <!-- ========== 行程 ========== -->
+    <section class="page" id="page-plan">
+      <details class="intro">
+        <summary>行程说明 · 交通/预约/动图怎么用</summary>
+        <div class="intro-body" id="introBody"></div>
+      </details>
+      <div id="dayPanels"></div>
+    </section>
+
+    <!-- ========== 动图 ========== -->
+    <section class="page" id="page-route" hidden>
+      <div class="daybar daybar-inline">
+        <div class="daybar-scroll" id="daybarRoute"></div>
+      </div>
+      <div id="routeBody"></div>
+    </section>
+
+    <!-- ========== 吃 ========== -->
+    <section class="page" id="page-eat" hidden>
+      <div id="eatBody"></div>
+    </section>
+
+    <!-- ========== 速查 ========== -->
+    <section class="page" id="page-shops" hidden>
+      <div class="searchwrap">
+        <input id="shopSearch" type="search" inputmode="search" placeholder="搜店名 / 用途 / 区域，如「湖锦」「过早」" autocomplete="off">
+      </div>
+      <div id="shopsBody"></div>
+    </section>
+
+    <!-- ========== 准备 ========== -->
+    <section class="page" id="page-prep" hidden>
+      <div id="prepBody"></div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar" id="tabbar" role="tablist">
+    <button class="tab" data-page="plan" role="tab" aria-selected="true"><span class="ti">🗓</span><span class="tl">行程</span></button>
+    <button class="tab" data-page="route" role="tab" aria-selected="false"><span class="ti">🗺</span><span class="tl">动图</span></button>
+    <button class="tab" data-page="eat" role="tab" aria-selected="false"><span class="ti">🍜</span><span class="tl">吃</span></button>
+    <button class="tab" data-page="shops" role="tab" aria-selected="false"><span class="ti">🔍</span><span class="tl">速查</span></button>
+    <button class="tab" data-page="prep" role="tab" aria-selected="false"><span class="ti">🧳</span><span class="tl">准备</span></button>
+  </nav>
+
+  <div class="lb" id="lb" hidden>
+    <div class="lb-bar">
+      <div class="lb-tabs" id="lbTabs"></div>
+      <button class="lb-close" id="lbClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="lb-stage" id="lbStage">
+      <video id="lbVideo" playsinline webkit-playsinline loop muted controls disablepictureinpicture></video>
+      <img id="lbImg" alt="路线图" hidden>
+    </div>
+    <div class="lb-tip" id="lbTip">双指放大 · 双击放大/复位 · 单指拖动</div>
+  </div>
 </div>
 
 <div class="toast" id="toast" hidden></div>
 
 <noscript><p style="padding:20px">需要开启 JavaScript 才能看这份攻略。</p></noscript>
 
-<script src="data.js"></script>
-<script src="app.js"></script>
+<script src="update.js"></script>
+<script src="shell.js"></script>
 </body>
 </html>

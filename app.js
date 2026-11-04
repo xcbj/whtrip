@@ -1,10 +1,23 @@
-/* 武汉四天三晚 · 手机版攻略 app
-   纯原生 JS，无依赖；一次性把四天渲染进 DOM，切天只切 hidden。 */
+/* 旅行攻略 · 单个行程的 App（通用）
+   纯原生 JS，无依赖；一次性把整趟行程渲染进 DOM，切天只切 hidden。
+   由 shell.js 在载入该行程的 data.js 之后调用 mount(GUIDE, cfg)。 */
 (function () {
   'use strict';
 
-  var G = window.GUIDE;
-  if (!G) { document.body.innerHTML = '<p style="padding:20px">数据未加载</p>'; return; }
+  /* 「单个行程」的 App。由 shell.js 在行程数据载入后调用：
+       window.__MOUNT__(window.GUIDE, cfg)
+     cfg = { id, city, title, homeTitle, assetBase, mapCity, features,
+             startDate, endDate, dateLabel, days:[{id,date,weekday,title}] }
+     所有行程共用这一份代码，行程之间的差别只来自 cfg 和 data.js。 */
+  function mount(G, CFG) {
+  CFG = CFG || {};
+  if (!G) {
+    var m = document.getElementById('main');
+    if (m) { m.innerHTML = '<p style="padding:20px">这份行程的数据没加载出来：可能没联网，也没离线缓存过。</p>'; }
+    return;
+  }
+  var HAS = {};
+  (CFG.features || ['plan', 'route', 'eat', 'shops', 'prep']).forEach(function (f) { HAS[f] = 1; });
 
   var RES = window.__RES__ || {};
   var B64 = window.__B64__ || {};
@@ -20,7 +33,7 @@
   }
 
   /* ---------- 资源地址 ---------- */
-  function asset(key) { return RES[key] || ('assets/' + key); }
+  function asset(key) { return RES[key] || ((CFG.assetBase || 'assets/') + key); }
 
   function videoSrc(key) {
     if (!B64[key]) return asset(key);
@@ -32,263 +45,17 @@
     return blobCache[key];
   }
 
-  function amap(q) { return 'https://uri.amap.com/search?keyword=' + encodeURIComponent(q) + '&city=' + encodeURIComponent('武汉'); }
+  function amap(q) { return 'https://uri.amap.com/search?keyword=' + encodeURIComponent(q) + (CFG.mapCity ? '&city=' + encodeURIComponent(CFG.mapCity) : ''); }
   function apple(q) { return 'https://maps.apple.com/?q=' + encodeURIComponent(q); }
 
-  /* ---------- toast / 复制 ---------- */
-  var toastEl = $('#toast'), toastTimer = 0;
-  function toast(msg) {
-    toastEl.textContent = msg;
-    toastEl.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toastEl.hidden = true; }, 1600);
-  }
-  /* 下拉刷新 / 手动刷新：先让 SW 拿新版本，再重载 */
-  var pullEl = document.getElementById('pull');
-  var pullTxt = pullEl ? pullEl.querySelector('.pt') : null;
-  var refreshing = false;
-
-  function setPull(y) {
-    if (!pullEl) { return; }
-    var h = pullEl.offsetHeight || 60;
-    var reveal = y > 0 ? Math.min(h, Math.round(y * (h / 68))) : 0;
-    pullEl.style.setProperty('--pull-y', reveal + 'px');
-    pullEl.classList.toggle('on', y >= 68);
-    if (pullTxt) { pullTxt.textContent = y >= 68 ? '松手刷新' : '下拉刷新'; }
-  }
-
-  function pullBusy(on) {
-    if (!pullEl) { return; }
-    pullEl.classList.toggle('busy', on);
-    pullEl.classList.remove('on');
-    if (on) {
-      pullEl.style.setProperty('--pull-y', (pullEl.offsetHeight || 60) + 'px');
-      if (pullTxt) { pullTxt.textContent = '正在刷新…'; }
-    } else {
-      pullEl.style.setProperty('--pull-y', '0px');
-      if (pullTxt) { pullTxt.textContent = '下拉刷新'; }
-    }
-  }
-
-  /* ---------- 国内镜像更新通道 ----------
-     github.io 在国内经常被污染/重置：独立 App 模式下点「强制刷新」，其实是去
-     github.io 重新取 sw.js，取不到就静默失败，于是永远停在旧缓存——这就是
-     「不开代理拉不到最新改动」的原因。这里改走 jsDelivr 的 GitHub 通道
-     （国内多数网络可直连、带 CORS），把 version.json 与变更文件直接写进本机
-     缓存再重载，全程不碰 github.io。 */
-  var MIRRORS = [
-    'https://raw.githack.com/xcbj/whtrip/main/',              // 缓存只 60 秒 → 永远最新
-    'https://cdn.jsdelivr.net/gh/xcbj/whtrip@main/',          // 稳、快，但 @main 会缓存 12 小时
-    'https://fastly.jsdelivr.net/gh/xcbj/whtrip@main/',
-    'https://gcore.jsdelivr.net/gh/xcbj/whtrip@main/',
-    'https://testingcf.jsdelivr.net/gh/xcbj/whtrip@main/',
-    'https://raw.githubusercontent.com/xcbj/whtrip/main/'     // 有代理时最原始的口子
-  ];
-  var VER_FILE = 'version.json';
-
-  function fetchT(url, ms, opt) {
-    opt = opt || {};
-    opt.cache = 'no-store';
-    if (typeof AbortController === 'undefined') { return fetch(url, opt); }
-    var ac = new AbortController();
-    var timer = setTimeout(function () { try { ac.abort(); } catch (e) { } }, ms);
-    opt.signal = ac.signal;
-    return fetch(url, opt).then(function (r) { clearTimeout(timer); return r; },
-      function (e) { clearTimeout(timer); throw e; });
-  }
-
-  function badVer(o) { return !o || typeof o.v !== 'string' || !o.v || !Array.isArray(o.files); }
-  function absUrl(p) { return new URL(p, location.href).href; }
-
-  /* 纯函数：远端清单 vs 本地清单 → 需要重下的路径（已最新给 []，坏数据给 null） */
-  function planChanges(remote, local) {
-    if (badVer(remote)) { return null; }
-    var have = {};
-    if (local && Array.isArray(local.files)) {
-      local.files.forEach(function (f) { if (f && f.p) { have[f.p] = f.h; } });
-    }
-    var all = remote.files.filter(function (f) { return f && f.p; }).map(function (f) { return f.p; });
-    if (badVer(local)) { return all; }               // 老版本安装还没有清单 → 全量对齐一次
-    if (local.v === remote.v) { return []; }
-    return remote.files.filter(function (f) { return f && f.p && have[f.p] !== f.h; })
-      .map(function (f) { return f.p; });
-  }
-
-  /* 本地已知版本：优先读缓存里的 version.json，读不到再看 localStorage
-     （清缓存/首次装的过渡期用得上，免得一上来就要重下 2.5MB 媒体） */
-  function cachedVer() {
-    var fromLs = function () {
-      try { var t = localStorage.getItem('wh-verj'); return t ? JSON.parse(t) : null; } catch (e) { return null; }
-    };
-    if (!window.caches) { return Promise.resolve(fromLs()); }
-    return caches.match(absUrl(VER_FILE), { ignoreSearch: true }).then(function (r) {
-      return r ? r.json() : fromLs();
-    }).catch(fromLs);
-  }
-
-  function saveVerLocal(obj) {
-    try { localStorage.setItem('wh-verj', JSON.stringify(obj)); } catch (e) { }
-  }
-
-  /* 新内容写进所有已存在的缓存（SW 缓存优先，写完立刻生效）
-     注意 index.html 还要覆盖 './' 这个键：直接访问站点根目录时命中的是它。 */
-  function putAll(p, res) {
-    var keys = [absUrl(p)];
-    if (p === 'index.html') { keys.push(absUrl('./')); }
-    if (!window.caches) { return Promise.resolve(); }
-    return caches.keys().then(function (list) {
-      return Promise.all(list.map(function (name) {
-        return caches.open(name).then(function (c) {
-          return Promise.all(keys.map(function (k) { return c.put(k, res.clone()); }));
-        });
-      }));
-    });
-  }
-
-  /* 逐个探镜像：拿到各自的 version.json（并带回 t 时间戳） */
-  function probeMirror(base, ms) {
-    return fetchT(base + VER_FILE + '?t=' + Date.now(), ms).then(function (r) {
-      if (!r.ok) { throw new Error('HTTP ' + r.status); }
-      return r.json();
-    }).then(function (j) {
-      if (badVer(j)) { throw new Error('清单损坏'); }
-      return { base: base, ver: j };
-    });
-  }
-
-  /* 并行问所有镜像，取「构建时间最新」的那份清单再下载。
-     之所以并行比较：jsDelivr 的 @main 有 12 小时边缘缓存，刚推完可能还是旧的；
-     raw.githack 只有 60 秒缓存。取最新的一份，就不会被慢的那个骗到。 */
-  function mirrorUpdate(o) {
-    o = o || {};
-    var out = { ok: false, mirror: '', local: '', remote: '', changed: [], probed: [], err: '' };
-    return cachedVer().then(function (local) {
-      out.local = (local && local.v) || '';
-      return Promise.all(MIRRORS.map(function (base) {
-        return probeMirror(base, o.timeout || 4500).catch(function (e) {
-          out.probed.push(base + ' ✗ ' + String((e && e.message) || e));
-          return null;
-        });
-      })).then(function (list) {
-        var good = list.filter(function (x) { return !!x; });
-        good.forEach(function (g) { out.probed.push(g.base + ' → ' + g.ver.v); });
-        if (!good.length) { out.err = '所有镜像都不通'; return out; }
-        good.sort(function (a, b) {
-          return String(b.ver.t || '').localeCompare(String(a.ver.t || ''));
-        });
-        var pick = good[0];
-        out.mirror = pick.base;
-        out.remote = pick.ver.v;
-        var todo = planChanges(pick.ver, local);
-        if (todo === null) { out.err = '清单损坏'; return out; }
-        out.changed = todo;
-        if (!todo.length || o.planOnly) { out.ok = true; return out; }
-        return todo.reduce(function (chain, p) {
-          return chain.then(function () {
-            return fetchT(pick.base + p + '?t=' + Date.now(), o.fileTimeout || 25000).then(function (r) {
-              if (!r.ok) { throw new Error(p + ' HTTP ' + r.status); }
-              return putAll(p, r);
-            });
-          });
-        }, Promise.resolve()).then(function () {
-          var body = new Blob([JSON.stringify(pick.ver)], { type: 'application/json' });
-          return putAll(VER_FILE, new Response(body, { headers: { 'Content-Type': 'application/json' } }));
-        }).then(function () {
-          saveVerLocal(pick.ver);
-          out.ok = true;
-          return out;
-        });
-      });
-    });
-  }
-
-  /* 兜底老路：镜像都不通时再找 GitHub（有代理或网络好时有效） */
-  function ghUpdate(cb) {
-    var finished = false;
-    function done(ok) {
-      if (finished) { return; }
-      finished = true;
-      clearTimeout(guard);
-      cb(ok);
-    }
-    var guard = setTimeout(function () { done(false); }, 2500);
-    try {
-      if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistration) { done(false); return; }
-      navigator.serviceWorker.getRegistration().then(function (reg) {
-        if (!reg) { done(false); return; }
-        if (reg.waiting) {           // 已有新版本在等 → 直接接管
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          navigator.serviceWorker.addEventListener('controllerchange', function () { done(true); });
-          setTimeout(function () { done(true); }, 1400);
-          return;
-        }
-        var p = reg.update();
-        if (p && p.then) { p.then(function () { done(true); }, function () { done(false); }); }
-        else { done(true); }
-      }, function () { done(false); });
-    } catch (e) { done(false); }
-  }
-
-  /* 下拉刷新 / 强制刷新：镜像优先，失败退回 GitHub */
-  function hardRefresh() {
-    if (refreshing) { return; }
-    refreshing = true;
-    pullBusy(true);
-    var over = false;
-    function stop(msg) {
-      if (over) { return; }
-      over = true;
-      refreshing = false;
-      pullBusy(false);
-      setPull(0);
-      if (msg) { toast(msg); }
-    }
-    function reloadWith(msg) {
-      if (over) { return; }
-      over = true;
-      try { sessionStorage.setItem('wh-refreshed', msg); } catch (e) { }
-      location.reload();
-    }
-    function fallbackGh() {
-      ghUpdate(function (ok) {
-        if (ok) { reloadWith('已刷新到最新内容'); } else { stop('网络不通，仍在使用本地缓存'); }
-      });
-    }
-    mirrorUpdate({}).then(function (r) {
-      if (r && r.ok && (r.changed || []).length) {
-        reloadWith('已从镜像更新（' + r.changed.length + ' 个文件）');
-        return;
-      }
-      if (r && r.ok) {
-        var down = (r.probed || []).filter(function (x) { return x.indexOf('✗') > 0; }).length;
-        stop(down ? '已是最新（' + down + ' 个镜像不通，可能还没同步）' : '已是最新版本');
-        return;
-      }
-      fallbackGh();
-    }, fallbackGh);
-  }
-
-  function copyText(t) {
-    var done = function () { toast('已复制：' + t); };
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(t).then(done, function () { legacyCopy(t, done); });
-    } else {
-      legacyCopy(t, done);
-    }
-  }
-  function legacyCopy(t, done) {
-    var ta = document.createElement('textarea');
-    ta.value = t;
-    ta.setAttribute('readonly', '');
-    ta.style.cssText = 'position:fixed;top:-1000px;left:0;opacity:0';
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, t.length);
-    try { document.execCommand('copy'); done(); }
-    catch (e) { toast('复制失败，请长按文字手工复制'); }
-    document.body.removeChild(ta);
-  }
-
+  /* toast / 复制 / 下拉刷新 / 版本检查 → 见 update.js（壳层共用） */
+  var UPD = window.__UPD__ || {};
+  function toast(m) { (UPD.toast || function () { })(m); }
+  function copyText(t) { (UPD.copyText || function () { })(t); }
+  function setPull(y) { (UPD.setPull || function () { })(y); }
+  function pullBusy(on) { (UPD.pullBusy || function () { })(on); }
+  function hardRefresh() { (UPD.hardRefresh || function () { location.reload(); })(); }
+  function cachedVer() { return UPD.cachedVer ? UPD.cachedVer() : Promise.resolve(null); }
   /* ---------- 时间工具 ---------- */
   function mins(s) {
     var m = /^\s*(\d{1,2})[:：](\d{2})/.exec(s || '');
@@ -477,18 +244,16 @@
   /* =========================================================
      渲染 · 动图
      ========================================================= */
-  var ROUTES = [
-    { id: 'd1', label: 'D1', sub: '11/12' },
-    { id: 'd2', label: 'D2', sub: '11/13' },
-    { id: 'd3', label: 'D3', sub: '11/14' },
-    { id: 'd4', label: 'D4', sub: '11/15' },
-    { id: 'all', label: '全览', sub: '四天' },
+  var ROUTES = (G.days || []).map(function (d) {
+    return { id: d.id.toLowerCase(), label: d.id, sub: d.date || '' };
+  }).concat([
+    { id: 'all', label: '全览', sub: ((G.days || []).length || '') + ' 天' },
     { id: 'rain', label: '雨天', sub: '备选' }
-  ];
+  ]);
 
   function routeMeta(id) {
     if (id === 'all') return { title: '四天总览', desc: '四天路线叠在一张图上，先看整体再看每天' };
-    if (id === 'rain') return { title: '雨天备选路线', desc: '下雨天改走室内线：省博 → 湖北美术馆 → 楚河汉街' };
+    if (id === 'rain') return { title: '雨天备选路线', desc: '下雨那天改走室内线（走法见「准备 · 下雨怎么走」）' };
     var d = G.days.filter(function (x) { return x.id.toLowerCase() === id; })[0];
     if (!d) return { title: id, desc: '' };
     return { title: d.id + ' · ' + d.date + ' ' + d.weekday, desc: d.title };
@@ -523,8 +288,8 @@
           // 离线单文件里视频是内嵌的，下载链接指向不存在的文件，索性不显示
           (window.__OFFLINE__
             ? ''
-            : '<a class="btn" href="' + esc(asset('mp4/' + id + '.mp4')) + '" download="武汉路线-' + id + '.mp4">保存视频</a>' +
-              '<a class="btn" href="' + esc(asset('gif/' + id + '.gif')) + '" download="武汉路线-' + id + '.gif">保存原动图 GIF</a>') +
+            : '<a class="btn" href="' + esc(asset('mp4/' + id + '.mp4')) + '" download="' + esc((CFG.city || '') + '路线') + '-' + id + '.mp4">保存视频</a>' +
+              '<a class="btn" href="' + esc(asset('gif/' + id + '.gif')) + '" download="' + esc((CFG.city || '') + '路线') + '-' + id + '.gif">保存原动图 GIF</a>') +
         '</div>' +
       '</div>' + extra +
       '<p class="hint" style="margin:12px 16px 20px">动图里每段都标了「地铁 2 号线 / 步行 / 轮渡」和耗时；<b>看不清点画面右上角 ⤢ 全屏</b>，进去后还能双指放大、双击放大（视频已存本地，不耗流量）。</p>';
@@ -642,7 +407,20 @@
   }
 
   /* ---------- 景点与门票待办（勾选状态存本机） ---------- */
-  var TK_KEY = 'wh-tk', TK_COL = 'wh-tkcol', TK_GRP = 'wh-tkgrp';
+  /* 勾选状态按行程分开存（换行程不串）；老版本的单键 wh-tk* 自动迁移一次 */
+  var TK_NS = 'tk:' + (CFG.id || 'default') + ':';
+  var TK_KEY = TK_NS + 'done', TK_COL = TK_NS + 'col', TK_GRP = TK_NS + 'grp';
+  (function () {
+    try {
+      [['wh-tk', TK_KEY], ['wh-tkcol', TK_COL], ['wh-tkgrp', TK_GRP]].forEach(function (p) {
+        var v = localStorage.getItem(p[0]);
+        if (v !== null && localStorage.getItem(p[1]) === null) {
+          localStorage.setItem(p[1], v);
+          localStorage.removeItem(p[0]);
+        }
+      });
+    } catch (e) { }
+  })();
   function tkFlag(k, def) { try { var v = localStorage.getItem(k); return v === null ? def : v === '1'; } catch (e) { return def; } }
   function tkFlagSet(k, on) { try { localStorage.setItem(k, on ? '1' : '0'); } catch (e) { } }
   function tkDone() {
@@ -946,14 +724,20 @@
     if (state.page === 'plan') h = state.day === 'RAIN' ? 'rain' : state.day.toLowerCase();
     else if (state.page === 'route') h = 'route-' + state.route;
     else h = state.page;
-    try { history.replaceState(null, '', '#' + h); } catch (e) { }
+    try { history.replaceState(null, '', '#' + (CFG.id ? CFG.id + '/' : '') + h); } catch (e) { }
+  }
+
+  function subHash() {
+    var raw = (location.hash || '').replace(/^#/, '');
+    if (CFG.id && raw.indexOf(CFG.id) === 0) { raw = raw.slice(CFG.id.length); }
+    return raw.replace(/^\//, '').toLowerCase();
   }
 
   function applyHash() {
-    var h = (location.hash || '').replace(/^#/, '').toLowerCase();
+    var h = subHash();
     if (!h) { setPage('plan', { noHash: true }); setDay(todayDay() || 'D1', { noHash: true, noAnim: firstHash }); return; }
     if (h === 'rain') { setPage('plan', { noHash: true }); setDay('RAIN', { noHash: true, noAnim: firstHash }); return; }
-    if (/^d[1-4]$/.test(h)) { setPage('plan', { noHash: true }); setDay(h.toUpperCase(), { noHash: true, noAnim: firstHash }); return; }
+    if (/^d\d+$/.test(h)) { setPage('plan', { noHash: true }); setDay(h.toUpperCase(), { noHash: true, noAnim: firstHash }); return; }
     if (h.indexOf('route') === 0) {
       setPage('route', { noHash: true });
       var r = h.split('-')[1];
@@ -968,7 +752,11 @@
   /* =========================================================
      日期：今天 / 距出发
      ========================================================= */
-  var TRIP = { y: 2026, m: 11, d: 12, days: 4 };
+  var TRIP = (function () {
+    var p = String(CFG.startDate || '').split('-');
+    var d = (CFG.days && CFG.days.length) || (G.days || []).length || 1;
+    return { y: +p[0] || 1970, m: +p[1] || 1, d: +p[2] || 1, days: d };
+  })();
 
   function dateKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 
@@ -992,7 +780,7 @@
     var now = new Date();
     var idx = tripDayIndex(now);
     var sub = $('#tbSub');
-    var base = '2026.11.12—11.15';
+    var base = CFG.dateLabel || (TRIP.y + '.' + TRIP.m + '.' + TRIP.d);
 
     if (idx >= 0) {
       sub.textContent = base + ' · 今天 D' + (idx + 1);
@@ -1093,7 +881,8 @@
   var lb = $('#lb'), lbStage = $('#lbStage'), lbVideo = $('#lbVideo'),
       lbImg = $('#lbImg'), lbTabs = $('#lbTabs'), lbTip = $('#lbTip');
   var lbId = null, view = { s: 1, tx: 0, ty: 0 }, gesture = null;
-  var LB_TABS = [['d1', 'D1'], ['d2', 'D2'], ['d3', 'D3'], ['d4', 'D4'], ['rain', '雨天'], ['all', '总览']];
+  var LB_TABS = (G.days || []).map(function (d) { return [d.id.toLowerCase(), d.id]; })
+    .concat([['rain', '雨天'], ['all', '总览']]);
 
   function lbEl() { return lbId === 'img' ? lbImg : lbVideo; }
 
@@ -1370,7 +1159,7 @@
     var IGNORE = '.daybar, .searchwrap, video, #shopSearch, #lb';
     var MAX = 56;
 
-    var PULL_MAX = 76, PULL_ARM = 68, pull = 0, pulling = false;
+    var PULL_MAX = 76, PULL_ARM = 68, pull = 0, pulling = false, refreshing = false;
 
     /* 行程页按「天」滑（D1…D4、雨天），动图页按「路线卡」滑（d1…d4、全览、雨天） */
     function seq() {
@@ -1442,7 +1231,7 @@
         pulling = false;
         var armed = pull >= PULL_ARM;
         pull = 0;
-        if (armed) { hardRefresh(); } else { setPull(0); }
+        if (armed) { refreshing = true; hardRefresh(); } else { setPull(0); }
         return;
       }
       var wasX = axis === 'x', el = panel;
@@ -1488,8 +1277,10 @@
   })();
 
   window.addEventListener('hashchange', function () {
-    var h = (location.hash || '').replace(/^#/, '').toLowerCase();
-    if (h === 'rain' || /^d[1-4]$/.test(h) || ['eat', 'shops', 'prep'].indexOf(h) >= 0 || h.indexOf('route') === 0) applyHash();
+    var raw = (location.hash || '').replace(/^#/, '');
+    if (CFG.id && raw.indexOf(CFG.id) !== 0) { return; }  // 切行程/回首页交给 shell.js
+    var h = subHash();
+    if (h === 'rain' || /^d\d+$/.test(h) || ['eat', 'shops', 'prep'].indexOf(h) >= 0 || h.indexOf('route') === 0) applyHash();
   });
 
   /* =========================================================
@@ -1499,7 +1290,7 @@
   buildDays();
   buildIntro();
   setDay(todayDay() || 'D1', { noHash: true, noAnim: true }); // 打开就在行程期 → 直接选中今天；否则 D1
-  setRoute(todayRoute(), { noHash: true, noAnim: true });     // 动图页同一套逻辑
+  if (HAS.route) { setRoute(todayRoute(), { noHash: true, noAnim: true }); } // 动图页同一套逻辑
   initToday();
   applyHash();
   firstHash = false;
@@ -1512,18 +1303,14 @@
     }
   } catch (e) { }
 
-  window.__APP__ = { tkRender: tkRender, setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh, todayDay: todayDay, todayRoute: todayRoute, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state, mirrors: MIRRORS, planChanges: planChanges, mirrorUpdate: mirrorUpdate, cachedVer: cachedVer };
-
-  /* =========================================================
-     Service Worker（GitHub Pages 上才生效）
-     局域网 http://192.168.x.x 属非安全上下文，注册会直接报错，先判断再注册。
-     ========================================================= */
-  var secure = location.protocol === 'https:' ||
-               location.hostname === 'localhost' ||
-               location.hostname === '127.0.0.1';
-  if (secure && !window.__OFFLINE__ && 'serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () { /* 失败不影响使用 */ });
-    });
+  window.__APP__ = {
+    tkRender: tkRender, setPage: setPage, setDay: setDay, setRoute: setRoute, hardRefresh: hardRefresh,
+    todayDay: todayDay, todayRoute: todayRoute, tripDayIndex: tripDayIndex, TRIP: TRIP, state: state,
+    cfg: CFG, has: HAS,
+    mirrors: UPD.MIRRORS, planChanges: UPD.planChanges, mirrorUpdate: UPD.mirrorUpdate, cachedVer: UPD.cachedVer
+  };
+  /* Service Worker 由 shell.js 注册（首页也要能装上）。 */
   }
+
+  window.__MOUNT__ = mount;
 })();

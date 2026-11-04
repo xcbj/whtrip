@@ -1,47 +1,41 @@
-/* 武汉攻略 · Service Worker
- * 目标：第一次联网打开时把整套内容（含 6 段路线视频）缓存到手机，
- *      之后断网/飞行模式也能一键打开、切天、播动图。
- * 改了站内文件 → 把下面的 VERSION 加一，用户下次打开自动换新。
+/* 旅行攻略 · Service Worker（多行程）
+ * 目标：第一次联网打开时就把「壳 + 每趟行程的文字内容」存到手机，
+ *      之后断网/飞行模式也能一键打开、切天、看历史攻略。
+ * 视频/封面这类大文件：只预缓存「现在要用到的那几趟」（构建时算好），
+ * 其余行程在你打开它的时候按需缓存（打开后 shell 还会发 PREFETCH 补全）。
+ * 改了站内文件 → tools/release.mjs 会自动改下面的 VERSION 和两张清单。
  */
-const VERSION = 'wh-20261104-fb92deb1';
+const VERSION = 'trips-20261104-feefc252';
 
 const CORE = [
   './',
   './index.html',
   './styles.css',
-  './data.js',
+  './shell.js',
+  './update.js',
   './app.js',
-  './version.json',
   './manifest.webmanifest',
+  './version.json',
+  './trips/index.json',
   './apple-touch-icon.png',
   './icon-192.png',
   './icon-512.png'
 ];
 
-const MEDIA = [
-  './assets/img/overview.jpg',
-  './assets/mp4/d1.mp4',
-  './assets/mp4/d2.mp4',
-  './assets/mp4/d3.mp4',
-  './assets/mp4/d4.mp4',
-  './assets/mp4/rain.mp4',
-  './assets/mp4/all.mp4',
-  './assets/poster/d1.jpg',
-  './assets/poster/d2.jpg',
-  './assets/poster/d3.jpg',
-  './assets/poster/d4.jpg',
-  './assets/poster/rain.jpg',
-  './assets/poster/all.jpg'
-];
+// ===== 构建时生成（tools/release.mjs），勿手改：开始 =====
+const TRIP_DATA = ['./trips/wuhan-2026-11/data.js'];
+const MEDIA = ['./assets/mp4/all.mp4', './assets/mp4/d1.mp4', './assets/mp4/d2.mp4', './assets/mp4/d3.mp4', './assets/mp4/d4.mp4', './assets/mp4/rain.mp4', './assets/poster/all.jpg', './assets/poster/d1.jpg', './assets/poster/d2.jpg', './assets/poster/d3.jpg', './assets/poster/d4.jpg', './assets/poster/rain.jpg', './assets/img/overview.jpg'];
+// ===== 构建时生成，勿手改：结束 =====
 
 const CACHE = VERSION;
+const ASSET_RE = /\/assets\/|\/trips\/|\/media\//;
 
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
     const cache = await caches.open(CACHE);
     // 逐个 put：任何一个失败都不会让整个安装失败（addAll 是原子的）
     await Promise.all(
-      [...CORE, ...MEDIA].map(async (url) => {
+      [...CORE, ...TRIP_DATA, ...MEDIA].map(async (url) => {
         try {
           const res = await fetch(new Request(url, { cache: 'reload' }));
           if (res && (res.ok || res.type === 'opaque')) await cache.put(url, res);
@@ -52,9 +46,27 @@ self.addEventListener('install', (e) => {
   })());
 });
 
-// 页面点「强制刷新」/ 下拉刷新时，让排队的 SW 立刻接管
 self.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+  const d = e.data || {};
+  // 页面点「检查更新」/下拉刷新时，让排队的新 SW 立刻接管
+  if (d.type === 'SKIP_WAITING') { self.skipWaiting(); return; }
+
+  // 打开某一趟行程后，把这趟的媒体（视频/封面）补进缓存，之后离线也能看
+  if (d.type === 'PREFETCH' && Array.isArray(d.urls) && d.urls.length) {
+    e.waitUntil((async () => {
+      const cache = await caches.open(CACHE);
+      for (const u of d.urls) {
+        let url;
+        try { url = new URL(u, self.registration.scope).href; } catch (err) { continue; }
+        const hit = await cache.match(url, { ignoreSearch: true });
+        if (hit) { continue; }
+        try {
+          const res = await fetch(url, { cache: 'reload' });
+          if (res && res.ok) { await cache.put(url, res); }
+        } catch (err) { /* 网络不行就算了，下次打开再补 */ }
+      }
+    })());
+  }
 });
 
 self.addEventListener('activate', (e) => {
@@ -118,7 +130,13 @@ self.addEventListener('fetch', (e) => {
     }
 
     try {
-      return await fetch(req);
+      const res = await fetch(req);
+      // 顺手把没预缓存到的行程内容/媒体存下来，下次离线就有
+      if (res && res.ok && ASSET_RE.test(url.pathname)) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => { });
+      }
+      return res;
     } catch (err) {
       if (url.pathname.endsWith('/') || url.pathname.endsWith('.html')) {
         const shell = await caches.match('./index.html', { ignoreSearch: true });

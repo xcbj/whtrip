@@ -1,0 +1,77 @@
+{
+ "builtAt": "2026-11-04T09:02:00.022Z",
+ "trips": [
+  {
+   "id": "wuhan-2026-11",
+   "city": "武汉",
+   "title": "武汉 · 四天三晚",
+   "homeTitle": "武汉四天三晚亲子游",
+   "summary": "老汉口散步 → 湖北省博 → 黄鹤楼 → 琴台馆；每天 3—4 个点位 + 1 顿正经饭",
+   "startDate": "2026-11-12",
+   "endDate": "2026-11-15",
+   "dayCount": 4,
+   "dateLabel": "2026.11.12—11.15",
+   "emoji": "🏯",
+   "accent": "#c8372d",
+   "cover": "assets/img/overview.jpg",
+   "assetBase": "assets/",
+   "mapCity": "武汉",
+   "features": [
+    "plan",
+    "route",
+    "eat",
+    "shops",
+    "prep"
+   ],
+   "data": "trips/wuhan-2026-11/data.js",
+   "media": [
+    "assets/mp4/all.mp4",
+    "assets/mp4/d1.mp4",
+    "assets/mp4/d2.mp4",
+    "assets/mp4/d3.mp4",
+    "assets/mp4/d4.mp4",
+    "assets/mp4/rain.mp4",
+    "assets/poster/all.jpg",
+    "assets/poster/d1.jpg",
+    "assets/poster/d2.jpg",
+    "assets/poster/d3.jpg",
+    "assets/poster/d4.jpg",
+    "assets/poster/rain.jpg",
+    "assets/img/overview.jpg"
+   ],
+   "counts": {
+    "days": 4,
+    "food": 15,
+    "shops": 43,
+    "tickets": 9,
+    "sights": 19
+   },
+   "days": [
+    {
+     "id": "D1",
+     "date": "11/12",
+     "weekday": "周四",
+     "title": "落地 + 老汉口散步（最轻松）"
+    },
+    {
+     "id": "D2",
+     "date": "11/13",
+     "weekday": "周五",
+     "title": "武昌：过早 + 省博 + 黄鹤楼 + 轮渡（主力日）"
+    },
+    {
+     "id": "D3",
+     "date": "11/14",
+     "weekday": "周六",
+     "title": "汉阳：琴台馆（重点）+ 古琴台 + 归元寺 + 晴川阁 + 汉阳江滩日落"
+    },
+    {
+     "id": "D4",
+     "date": "11/15",
+     "weekday": "周日",
+     "title": "过早 + 伴手礼 + 返程"
+    }
+   ]
+  }
+ ]
+}

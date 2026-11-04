@@ -1,11 +1,16 @@
 /* 由 tools/parse_guide.mjs 从《武汉最终版攻略-2026年11月12-15日.md》自动生成，勿手改。
-   重新生成： node tools/parse_guide.mjs */
+   重新生成： node tools/parse_guide.mjs wuhan-2026-11 */
 window.GUIDE = {
  "meta": {
   "title": "武汉四天三晚亲子游",
   "subtitle": "最终版 · 2026年11月12—15日",
-  "builtAt": "2026-11-04T07:51:55.927Z",
-  "source": "武汉最终版攻略-2026年11月12-15日.md"
+  "builtAt": "2026-11-04T09:02:00.015Z",
+  "source": "武汉最终版攻略-2026年11月12-15日.md",
+  "tripId": "wuhan-2026-11",
+  "city": "武汉",
+  "startDate": "2026-11-12",
+  "endDate": "2026-11-15",
+  "dayCount": 4
  },
  "kinds": {
   "flight": {
