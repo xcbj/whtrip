@@ -318,11 +318,21 @@
       renderHome(list);
       return;
     }
-    if (!raw) {                            // 空 hash：行程期自动进当天那一趟
+    /* 空 hash（从主屏图标/直接打开）：优先进「正在进行」的那趟，
+       没有就进「最近要出发」的那趟；都只剩历史行程时才停在清单。
+       点过「‹全部」会留下 #/，那种情况尊重用户，停在清单。 */
+    if (!raw) {
       var live = list.filter(function (t) { return status(t).kind === 'live'; })[0];
-      if (live) {
-        try { history.replaceState(null, '', '#' + live.id); } catch (e) { }
-        mountTrip(live);
+      var soon = null;
+      if (!live) {
+        var ups = list.filter(function (t) { return status(t).kind === 'next'; });
+        ups.sort(function (a, b) { return String(a.startDate).localeCompare(String(b.startDate)); });
+        soon = ups[0] || null;
+      }
+      var pick = live || soon;
+      if (pick) {
+        try { history.replaceState(null, '', '#' + pick.id); } catch (e) { }
+        mountTrip(pick);
         return;
       }
     }
