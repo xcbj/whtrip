@@ -230,8 +230,18 @@
     location.hash = '#' + id;
     location.reload();
   }
+  /* 「这次是特意回清单的」记一个标记：重载后别又把人家弹回行程里
+     （主屏图标冷启动时没有这个标记 → 照常默认进最近的那趟） */
+  function homeExplicit(v) {
+    try {
+      if (v === undefined) { return sessionStorage.getItem('homeExp') === '1'; }
+      sessionStorage.setItem('homeExp', v ? '1' : '0');
+    } catch (e) { }
+    return false;
+  }
   function goHome() {
-    if (location.hash === '#/' || location.hash === '') { location.hash = '#/'; location.reload(); return; }
+    homeExplicit(true);
+    if (location.hash === '#/') { location.reload(); return; }
     location.hash = '#/';
     location.reload();
   }
@@ -259,6 +269,7 @@
 
   function mountTrip(t) {
     current = t;
+    homeExplicit(false);           // 进了行程就把「特意回清单」的标记清掉
     document.body.classList.remove('mode-home');
     document.body.classList.add('mode-trip');
     document.title = t.homeTitle || t.title || '旅行攻略';
@@ -318,10 +329,10 @@
       renderHome(list);
       return;
     }
-    /* 空 hash（从主屏图标/直接打开）：优先进「正在进行」的那趟，
+    /* 没有指定某趟时（主屏图标冷启动就是这种）：优先进「正在进行」的那趟，
        没有就进「最近要出发」的那趟；都只剩历史行程时才停在清单。
-       点过「‹全部」会留下 #/，那种情况尊重用户，停在清单。 */
-    if (!raw) {
+       例外：用户刚点过「‹全部」回来（homeExp 标记），那就老实停在清单。 */
+    if (!raw || (raw === '/' && !homeExplicit())) {
       var live = list.filter(function (t) { return status(t).kind === 'live'; })[0];
       var soon = null;
       if (!live) {
