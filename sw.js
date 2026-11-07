@@ -5,7 +5,7 @@
  * 其余行程在你打开它的时候按需缓存（打开后 shell 还会发 PREFETCH 补全）。
  * 改了站内文件 → tools/release.mjs 会自动改下面的 VERSION 和两张清单。
  */
-const VERSION = 'trips-20261106-2f3ab031';
+const VERSION = 'trips-20261107-b431ef23';
 
 const CORE = [
   './',
@@ -23,7 +23,7 @@ const CORE = [
 ];
 
 // ===== 构建时生成（tools/release.mjs），勿手改：开始 =====
-const TRIP_DATA = ['./trips/wuhan-2026-11/data.js'];
+const TRIP_DATA = ['./trips/wuhan-2026-11/data.js', './trips/wuhan-2026-11/spots.js', './trips/wuhan-2026-11/data-planb.js'];
 const MEDIA = ['./assets/mp4/all.mp4', './assets/mp4/d1.mp4', './assets/mp4/d2.mp4', './assets/mp4/d3.mp4', './assets/mp4/d4.mp4', './assets/mp4/rain.mp4', './assets/poster/all.jpg', './assets/poster/d1.jpg', './assets/poster/d2.jpg', './assets/poster/d3.jpg', './assets/poster/d4.jpg', './assets/poster/rain.jpg', './assets/img/overview.jpg'];
 // ===== 构建时生成，勿手改：结束 =====
 

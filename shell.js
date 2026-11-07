@@ -68,6 +68,9 @@
     if (t.counts && t.counts.food) { kv.push('🍜 ' + t.counts.food + ' 家吃'); }
     if (t.counts && t.counts.shops) { kv.push('🔍 ' + t.counts.shops + ' 家店'); }
     if (t.counts && t.counts.tickets) { kv.push('🧳 ' + t.counts.tickets + ' 项待办'); }
+    if (t.plans && t.plans.length > 1) {
+      kv.push('🔀 ' + t.plans.map(function (p) { return p.id; }).join('/') + ' 两套可切');
+    }
     // 封面图（trip.json 的 cover）：有图就当缩略图，没图退回 emoji 方块
     var head = t.cover
       ? '<span class="tc-thumb" aria-hidden="true" style="background-image:url(\'' + esc(t.cover) + '\')">' +
@@ -267,6 +270,42 @@
     } catch (e) { }
   }
 
+  /* ---------- 方案切换入口（顶栏一个按钮 + 一行说明条） ---------- */
+  var PLAN_HINTS = null;
+  function planKey(t) { return 'plan:' + t.id; }
+  function showPlanBar(t, plans, cur) {
+    hidePlanBar();
+    var btn = $('#tbPlan');
+    if (btn) {
+      btn.hidden = false;
+      btn.dataset.planId = cur.id;
+      btn.setAttribute('aria-label', '当前 ' + (cur.label || '方案') + '，点一下换成另一个方案');
+      btn.innerHTML = '<span>' + esc(cur.label || 'Plan') + '</span><i aria-hidden="true">⇄</i>';
+      btn.onclick = function () {
+        var i = 0;
+        for (var k = 0; k < plans.length; k++) { if (plans[k].id === cur.id) { i = k; } }
+        var next = plans[(i + 1) % plans.length];
+        try { localStorage.setItem(planKey(t), next.id); } catch (e) { }
+        toast('已切到 ' + (next.label || '另一个方案'));
+        location.reload();
+      };
+    }
+    if (cur.note) {
+      var bar = document.createElement('div');
+      bar.id = 'planNote';
+      bar.className = 'plan-note';
+      bar.innerHTML = '<b>' + esc(cur.label || 'Plan') + '</b>' + (cur.sub ? esc(cur.sub) + ' · ' : '') + esc(cur.note);
+      var main = $('#main');
+      if (main && main.parentNode) { main.parentNode.insertBefore(bar, main); }
+    }
+  }
+  function hidePlanBar() {
+    var btn = $('#tbPlan');
+    if (btn) { btn.hidden = true; btn.onclick = null; }
+    var bar = $('#planNote');
+    if (bar && bar.parentNode) { bar.parentNode.removeChild(bar); }
+  }
+
   function mountTrip(t) {
     current = t;
     homeExplicit(false);           // 进了行程就把「特意回清单」的标记清掉
@@ -278,6 +317,24 @@
     $('#tbTitle').textContent = t.title || t.city || '行程';
     $('#tbSub').textContent = dateLabel(t) + (daySpan(t) ? ' · ' + daySpan(t) + ' 天' : '');
     $('#tbBack').hidden = false;
+
+    /* ---------- 方案切换：同一趟行程可以有多套 Plan（A/B…） ---------- */
+    var plans = (t.plans && t.plans.length > 1) ? t.plans : null;
+    var dataSrc = t.data;
+    if (plans) {
+      var PLAN_KEY = 'plan:' + t.id;
+      var want = '';
+      var mPlan = /[?&]plan=([A-Za-z0-9_-]+)/.exec(location.search + location.hash);
+      if (mPlan) { want = mPlan[1]; try { localStorage.setItem(PLAN_KEY, want); } catch (e) { } }
+      else { try { want = localStorage.getItem(PLAN_KEY) || ''; } catch (e) { } }
+      var plan = plans.filter(function (p) { return p.id === want; })[0] ||
+                 plans.filter(function (p) { return p.id === (t.defaultPlan || plans[0].id); })[0] ||
+                 plans[0];
+      dataSrc = plan.data;
+      showPlanBar(t, plans, plan);
+    } else {
+      hidePlanBar();
+    }
 
     var feats = t.features || DEFAULT_FEATURES;
     $$('.tab').forEach(function (b) { b.hidden = feats.indexOf(b.dataset.page) < 0; });
@@ -296,8 +353,19 @@
       days: t.days || []
     };
 
-    loadScript('app.js').then(function () { return loadScript(t.data); }).then(function () {
+    /* 看点手册（同一趟行程两个方案共用一份，可选）：先加载，app.js 渲染时按关键词挂到行上 */
+    var spotsSrc = t.spots || ('trips/' + t.id + '/spots.js');
+    loadScript('app.js')
+      .then(function () { return loadScript(spotsSrc).catch(function () { window.SPOTS = window.SPOTS || []; }); })
+      .then(function () { return loadScript(dataSrc); }).then(function () {
       if (typeof window.__MOUNT__ !== 'function' || !window.GUIDE) { throw new Error('行程数据没加载出来'); }
+      /* 日期分段的标题以「实际载入的这份数据」为准：Plan A / Plan B 的逐日标题不一样，
+         index.json 里只存了默认方案（Plan A）的标题，切到 Plan B 会张冠李戴 */
+      if (Array.isArray(window.GUIDE.days) && window.GUIDE.days.length) {
+        cfg.days = window.GUIDE.days.map(function (d) {
+          return { id: d.id, date: d.date || '', weekday: d.weekday || '', title: d.title || '' };
+        });
+      }
       window.__MOUNT__(window.GUIDE, cfg);
       prefetch(t);
     }).catch(function (e) {

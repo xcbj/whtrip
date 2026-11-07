@@ -70,6 +70,24 @@ button { touch-action: manipulation; cursor: pointer; }
 .tb-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
 .topbar h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
 .tb-sub { font-size: 12px; color: var(--txt3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-plan {
+  flex: none; display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px;
+  background: var(--card); color: var(--txt); font-size: 12.5px; font-weight: 700;
+  min-height: 34px; white-space: nowrap;
+}
+.tb-plan i { font-style: normal; font-size: 11px; color: var(--txt3); }
+.tb-plan:active { opacity: .55; }
+.tb-plan[hidden] { display: none; }
+
+/* 方案说明条（顶栏下方一行） */
+.plan-note {
+  padding: 8px 16px; font-size: 12.5px; line-height: 1.5; color: var(--txt2);
+  background: color-mix(in srgb, var(--pri) 7%, var(--bg));
+  border-bottom: 1px solid var(--line);
+}
+.plan-note b { color: var(--pri); margin-right: 6px; }
+
 .today-btn {
   flex: none; border: 0; border-radius: 999px; padding: 7px 14px;
   background: var(--pri); color: #fff; font-size: 13px; font-weight: 600;
@@ -188,15 +206,19 @@ main { padding: 0; }
   box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
 }
 .row-line {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 11px 12px; min-height: 52px;
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 11px 12px 11px 10px; min-height: 52px;
 }
 .row-line[data-toggle] { cursor: pointer; }
 .time {
-  flex: none; width: 58px; display: flex; flex-direction: column;
+  flex: none; display: flex; flex-direction: column;
   font-variant-numeric: tabular-nums; color: var(--pri);
   padding-top: 1px; line-height: 1.35;
 }
+/* 侧栏：时间 + 图标 + 改/新标签 + 复制地名，全部挤在左边窄栏里，正文不被侵占 */
+.rail { flex: none; width: 58px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.rail-b { display: flex; align-items: center; gap: 4px; min-height: 15px; }
+.rail-b .ico { width: auto; font-size: 13.5px; line-height: 1.2; }
 .time b { font-size: 14px; font-weight: 700; white-space: nowrap; }
 .time i {
   font-style: normal; font-size: 11.5px; font-weight: 600;
@@ -208,12 +230,29 @@ main { padding: 0; }
 .tt { font-size: 15px; line-height: 1.45; word-break: break-word; }
 .nt { font-size: 12.5px; color: var(--txt2); margin-top: 2px; line-height: 1.5; }
 .go {
-  flex: none; width: 34px; height: 34px; margin: -3px -4px 0 0;
-  display: flex; align-items: center; justify-content: center;
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
   border-radius: 10px; background: var(--pri-weak); color: var(--pri);
-  font-size: 16px; text-decoration: none; font-weight: 700;
+  text-decoration: none; font-weight: 700;
+  border: 0; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent;
 }
 .go:active { opacity: .6; }
+/* 复制地名：侧栏里的小药丸，描边不填色，别再抢正文的眼睛 */
+.go-copy {
+  height: 18px; padding: 0 5px; border-radius: 6px;
+  background: transparent; box-shadow: inset 0 0 0 1px var(--pri-weak);
+  color: var(--pri); font-size: 9.5px; letter-spacing: .2px; font-weight: 600; white-space: nowrap;
+}
+.go-copy:active { background: var(--pri-weak); opacity: 1; }
+/* 看点块 */
+.dr-when { font-style: normal; font-weight: 500; color: var(--txt3); margin-left: 6px; font-size: 11.5px; }
+.row-detail .spot { border-left: 3px solid var(--pri); padding: 2px 0 2px 10px; }
+.sp { font-size: 13px; line-height: 1.68; color: var(--txt1); margin-top: 6px; }
+.sp b { display: inline-block; margin-right: 6px; font-size: 11.5px; font-weight: 700;
+  color: var(--pri); background: var(--pri-weak); border-radius: 5px; padding: 1px 5px;
+  vertical-align: 1px; white-space: nowrap; }
+.sp-note { color: var(--txt2); }
+.sp-note b { color: var(--txt2); background: rgba(0,0,0,.05); }
 .caret {
   flex: none; width: 16px; color: var(--txt3); font-size: 11px;
   display: flex; align-items: center; justify-content: center;
@@ -699,3 +738,29 @@ body.mode-home { padding-bottom: calc(var(--safe-b) + 20px); }
   #printDoc th, #printDoc td { border: .6pt solid #999; padding: 1.4mm 2mm; text-align: left; vertical-align: top; }
   #printDoc th { background: #f0f0f0; }
 }
+
+/* ---------------- 多版本日（D4 返程日四选一）：可折叠面板，里面仍是「时间 + 行程」 ---------------- */
+.vers { margin: 10px 12px 0; }
+.ver {
+  background: var(--card); border-radius: 12px; margin-bottom: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04); overflow: hidden;
+}
+.ver > summary {
+  display: flex; align-items: center; gap: 8px; padding: 13px 12px;
+  cursor: pointer; list-style: none;
+}
+.ver > summary::-webkit-details-marker { display: none; }
+.ver-k {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--pri-weak); color: var(--pri);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+}
+.ver-t { font-size: 15px; font-weight: 600; }
+.ver-m { margin-left: auto; font-size: 11px; color: var(--txt3); white-space: nowrap; }
+.ver > summary .caret { flex: none; transition: transform .18s; }
+.ver[open] > summary .caret { transform: rotate(180deg); }
+.ver[open] .row:not(.open) .caret { transform: none; }
+.ver-body { padding: 0 6px 8px; border-top: 1px solid var(--line); }
+.ver-when { font-size: 12.5px; color: var(--txt2); padding: 10px 6px 0; line-height: 1.55; }
+.ver .timeline { margin: 8px 2px 2px; }

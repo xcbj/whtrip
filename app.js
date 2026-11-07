@@ -93,10 +93,40 @@
     $('#daybarPlan').innerHTML = html;
   }
 
-  function rowHtml(row, idx) {
-    var kind = KINDS[row.kind] || { icon: '•', label: '' };
+  /* ---------- 看点手册（window.SPOTS，由 tools/build_spots.mjs 生成） ----------
+     Plan A / Plan B 共用一份：按行里的地名关键词挂上去，命中哪条展开就显示哪条。 */
+  var SPOTS = (window.SPOTS || []).slice().sort(function (a, b) {
+    return maxKw(b) - maxKw(a);
+  });
+  function maxKw(s) {
+    return (s.kw || []).reduce(function (m, k) { return Math.max(m, String(k).length); }, 0);
+  }
+  var NO_SPOT_KINDS = { metro: 1, taxi: 1, flight: 1, rest: 1 };
+  function findSpot(row) {
+    if (!SPOTS.length || NO_SPOT_KINDS[row.kind]) return null;
+    /* 先按导航地名匹配（最可信），再退到标题；说明文字（note）不参与匹配，
+       否则「避开 11/14 在粮道街吃的那几样」这种一句话会把看点挂错 */
+    var passes = [row.nav || '', row.title || ''];
+    for (var p = 0; p < passes.length; p++) {
+      if (!passes[p]) continue;
+      for (var i = 0; i < SPOTS.length; i++) {
+        var kw = SPOTS[i].kw || [];
+        for (var j = 0; j < kw.length; j++) {
+          if (kw[j] && passes[p].indexOf(kw[j]) > -1) return SPOTS[i];
+        }
+      }
+    }
+    return null;
+  }
+
+  function rowHtml(row, idx, seen) {
+    var kind = KINDS[row.kind] || { icon: '\u2022', label: '' };
     var scene = row.scene ? (SCENES[row.scene] || sceneByLabel[row.scene]) : null;
-    var hasDetail = !!(scene || row.nav);
+    var spot = findSpot(row);
+    // 同一个点位一天里出现好几行（进园/登楼/看秀），看点只挂在第一行，别刷屏
+    if (spot && seen) { if (seen[spot.id]) spot = null; else seen[spot.id] = 1; }
+    // 展开里只剩「有内容可看」的才给展开：看点 或 备选门店；都没有就不展开（也没有 ▾）
+    var hasDetail = !!(spot || (scene && (scene.first || (scene.alternatives && scene.alternatives.length) || scene.tip)));
     var sp = rowSpan(row.time);
     var tm = String(row.time);
     var tmM = /^(.{1,7}?)\s*[—–]\s*(.{1,7})$/.exec(tm);
@@ -105,27 +135,40 @@
       : '<span class="time"><b>' + esc(tm) + '</b></span>';
     var tag = row.tag ? '<span class="tag tag-' + esc(row.tag) + '">' + esc(row.tag) + '</span>' : '';
     var nav = row.nav || '';
-    var copyWhat = nav || row.title;
     var note = row.note && !/^[—–\-－]+$/.test(String(row.note).trim()) ? row.note : '';
+
+    /* 版式：左边一条窄「侧栏」（时间 / 图标 / 改新标签 / 复制地名），右边正文吃满剩余宽度。
+       次要信息一律放进侧栏，不许挤正文——正文里的标题和提醒是主要信息。 */
+    var rail = '<div class="rail">' + timeCell +
+      '<div class="rail-b"><span class="ico" aria-hidden="true">' + kind.icon + '</span>' + tag + '</div>';
+    // 复制地名（不再跳地图）：空间够就写全「复制地名」
+    if (nav) {
+      rail += '<button class="go go-copy" type="button" data-copy="' + esc(nav) + '" ' +
+        'title="复制地名" aria-label="复制地名：' + esc(nav) + '">复制地名</button>';
+    }
+    rail += '</div>';
 
     var h = '<li class="row" data-i="' + idx + '" data-kind="' + esc(row.kind) + '"' +
       (row.tag ? ' data-tag="' + esc(row.tag) + '"' : '') +
       (sp[0] != null ? ' data-t="' + sp[0] + '" data-te="' + sp[1] + '"' : '') + '>' +
       '<div class="row-line"' + (hasDetail ? ' data-toggle="1"' : '') + '>' +
-      timeCell + tag +
-      '<span class="ico" aria-hidden="true">' + kind.icon + '</span>' +
+      rail +
       '<div class="txt"><div class="tt">' + esc(row.title) + '</div>' +
       (note ? '<div class="nt">' + esc(note) + '</div>' : '') + '</div>';
-
-    if (nav) {
-      h += '<a class="go" href="' + esc(amap(nav)) + '" target="_blank" rel="noopener" ' +
-        'aria-label="高德导航到' + esc(nav) + '">↗</a>';
-    }
-    if (hasDetail) h += '<span class="caret" aria-hidden="true">▾</span>';
+    if (hasDetail) h += '<span class="caret" aria-hidden="true">\u25be</span>';
     h += '</div>';
 
     if (hasDetail) {
       h += '<div class="row-detail" hidden>';
+      if (spot) {
+        h += '<div class="dr spot"><div class="dr-h">看点' +
+          (spot.when ? '<i class="dr-when">' + esc(spot.when) + '</i>' : '') + '</div>';
+        if (spot.look) h += '<div class="sp"><b>看头</b>' + esc(spot.look) + '</div>';
+        if (spot.why) h += '<div class="sp"><b>为什么排它</b>' + esc(spot.why) + '</div>';
+        if (spot.vs) h += '<div class="sp"><b>比同类强在哪</b>' + esc(spot.vs) + '</div>';
+        if (spot.note) h += '<div class="sp sp-note"><b>注意</b>' + esc(spot.note) + '</div>';
+        h += '</div>';
+      }
       if (scene) {
         h += '<div class="dr"><div class="dr-h">首选</div><div class="sc-first">' + esc(scene.first) + '</div></div>';
         if (scene.alternatives && scene.alternatives.length) {
@@ -135,13 +178,10 @@
         }
         if (scene.tip) h += '<div class="dr"><div class="sc-tip">' + esc(scene.tip) + '</div></div>';
       }
-      h += '<div class="dr acts">';
-      if (nav) {
-        h += '<a class="btn" href="' + esc(amap(nav)) + '" target="_blank" rel="noopener">高德地图</a>';
-        h += '<a class="btn" href="' + esc(apple(nav)) + '" target="_blank" rel="noopener">苹果地图</a>';
+      if (!nav && scene && scene.first) {
+        h += '<div class="dr acts"><button class="btn" data-copy="' + esc(scene.first) + '">复制首选店名</button></div>';
       }
-      h += '<button class="btn" data-copy="' + esc(copyWhat) + '">复制' + (nav ? '地名' : '行程') + '</button>';
-      h += '</div></div>';
+      h += '</div>';
     }
     return h + '</li>';
   }
@@ -192,9 +232,30 @@
       '</summary><div class="acc-body">' + body + '</div></details>';
   }
 
+  /* 一天里有多个版本（D4 返程日四选一）：每个版本一张可折叠面板，里面还是「时间 + 行程」的老样子 */
+  function versionsHtml(vers) {
+    var n = 0;
+    return '<div class="vers">' + vers.map(function (v) {
+      var seen = {};
+      var lines = v.rows.map(function (r) { return rowHtml(r, n++, seen); }).join('');
+      var first = v.rows[0] ? String(v.rows[0].time).split(/[—–]/)[0] : '';
+      return '<details class="ver">' +
+        '<summary><span class="ver-k">' + esc(v.key) + '</span>' +
+        '<span class="ver-t">' + esc(v.title) + '</span>' +
+        '<span class="ver-m">' + v.rows.length + ' 步 · ' + esc(first) + ' 起</span>' +
+        '<span class="caret" aria-hidden="true">\u25be</span></summary>' +
+        '<div class="ver-body">' +
+        (v.when ? '<div class="ver-when">' + esc(v.when) + '</div>' : '') +
+        '<ul class="timeline">' + lines + '</ul></div></details>';
+    }).join('') + '</div>';
+  }
+
   function buildDays() {
     var html = G.days.map(function (d) {
-      var rows = d.rows.map(rowHtml).join('');
+      var seen = {};
+      var rows = (d.vers && d.vers.length)
+        ? versionsHtml(d.vers)
+        : '<ul class="timeline">' + d.rows.map(function (r, i) { return rowHtml(r, i, seen); }).join('') + '</ul>';
       var notices = (d.notices || []).map(noticeHtml).join('');
       var transit = (d.transit && d.transit.length)
         ? '<details class="acc"><summary>段间交通<span class="hint" style="margin-left:auto;margin-right:8px">' +
@@ -211,8 +272,11 @@
       return '<article class="day-panel" data-day="' + d.id + '" hidden>' +
         '<div class="dayhead"><div class="dh-top"><span class="dh-id">' + esc(d.id) + '</span>' +
         '<h2>' + esc(d.title) + '</h2></div>' +
-        '<p class="dh-date">' + esc(d.date) + ' ' + esc(d.weekday) + ' · ' + d.rows.length + ' 个节点' + chgTag + '</p></div>' +
-        '<ul class="timeline">' + rows + '</ul>' + flow + changes + notices + transit + '</article>';
+        '<p class="dh-date">' + esc(d.date) + ' ' + esc(d.weekday) + ' · ' +
+        ((d.vers && d.vers.length)
+          ? d.vers.length + ' 个版本，当场选一个（共 ' + d.rows.length + ' 步）'
+          : d.rows.length + ' 个节点') + chgTag + '</p></div>' +
+        (d.vers && d.vers.length ? notices + rows : rows + notices) + flow + changes + transit + '</article>';
     }).join('');
 
     // 雨天备选
@@ -220,7 +284,7 @@
       '<div class="dayhead"><div class="dh-top"><span class="dh-id" style="background:var(--warn)">雨天</span>' +
       '<h2>下雨 / 累了 / 想加点的切换方案</h2></div>' +
       '<p class="dh-date">看「动图」页的雨天动图，按这条路走</p></div>' +
-      '<div class="notice">下雨优先室内：省博 → 湖北美术馆（省博旁免费）→ 楚河汉街（商场有儿童餐）。黄鹤楼顺延到 D3 傍晚或放弃登楼。</div>' +
+      '<div class="notice">下雨优先室内：省博 → 湖北美术馆（省博旁免费）→ 楚河汉街（商场有儿童餐）。黄鹤楼若走夜游，看当天 17:00 公众号/4000270266 公告：停演且未入园可退，改成司门口晚餐 + 江汉路/吉庆街。</div>' +
       ((G.alternatives || []).length ? '<ul class="timeline">' + G.alternatives.map(function (a, i) {
         return '<li class="row"><div class="row-line"><span class="time">方案 ' + (i + 1) + '</span>' +
           '<span class="ico">' + (i === 0 ? '🌧' : i === 1 ? '😮‍💨' : '➕') + '</span>' +
@@ -238,7 +302,7 @@
     var body = $('#introBody');
     var list = G.itineraryIntro || [];
     body.innerHTML = list.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') ||
-      '<p>每天按时间顺序列节点，点一行展开备选门店 / 复制地名 / 苹果地图；右侧 ↗ 直接开高德。</p>';
+      '<p>每天按时间顺序列节点，点一行展开「看点 + 备选门店」；右侧「复制」把地名复制走，粘到任何地图 App 都能搜。</p>';
   }
 
   /* =========================================================
@@ -942,10 +1006,50 @@
     var li = line.parentNode;
     var d = $('.row-detail', li);
     if (!d) return;
-    var open = d.hidden;
-    d.hidden = !open;
-    li.classList.toggle('open', open);
+    var willOpen = d.hidden;
+    /* 手风琴：同一天（多版本日则同版本）里同时只展开一行——
+       焦点给到这一行，又不把上下文挤走；也就不用弹窗那套关闭动作。 */
+    if (willOpen) {
+      var scope = (li.closest && (li.closest('.ver-body') || li.closest('.day-panel'))) || null;
+      if (scope) {
+        $$('.row.open', scope).forEach(function (o) {
+          if (o === li) return;
+          var od = $('.row-detail', o);
+          if (od) od.hidden = true;
+          o.classList.remove('open');
+        });
+      }
+    }
+    d.hidden = !willOpen;
+    li.classList.toggle('open', willOpen);
+    /* 展开后把这一行带到屏幕上方约 1/5 处，别让看点掉到屏幕外 */
+    if (willOpen) {
+      setTimeout(function () {
+        var top = li.getBoundingClientRect().top;
+        var want = Math.round(window.innerHeight * 0.2);
+        if (top < want - 40 || top > window.innerHeight * 0.55) {
+          window.scrollBy({ top: top - want, behavior: 'smooth' });
+        }
+      }, 40);
+    }
   }
+
+  /* 多版本面板也是手风琴：展开一版就把同组其他版本收起，并把这一版带到屏幕上方约 1/5 处 */
+  document.addEventListener('toggle', function (e) {
+    var v = e.target;
+    if (!v || !v.classList || !v.classList.contains('ver') || !v.open) return;
+    var wrap = v.parentNode;
+    if (wrap) {
+      $$('.ver', wrap).forEach(function (o) { if (o !== v && o.open) o.open = false; });
+    }
+    setTimeout(function () {
+      var top = v.getBoundingClientRect().top;
+      var want = Math.round(window.innerHeight * 0.2);
+      if (top < want - 40 || top > window.innerHeight * 0.55) {
+        window.scrollBy({ top: top - want, behavior: 'smooth' });
+      }
+    }, 40);
+  }, true);
 
   /* 播放路线动图。
      在线：直接给 <video> 地址，边下边播最快。

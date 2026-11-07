@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-11-06T13:18:23.086Z",
+ "builtAt": "2026-11-07T05:54:51.656Z",
  "trips": [
   {
    "id": "wuhan-2026-11",
@@ -30,6 +30,24 @@
     "prep"
    ],
    "data": "trips/wuhan-2026-11/data.js",
+   "spots": "trips/wuhan-2026-11/spots.js",
+   "plans": [
+    {
+     "id": "A",
+     "label": "Plan A",
+     "sub": "11/14 夜游黄鹤楼",
+     "note": "11/13 汉阳（雨天室内）+ 11/14 武昌 + 夜游黄鹤楼；动图仍是原方案路线",
+     "data": "trips/wuhan-2026-11/data.js"
+    },
+    {
+     "id": "B",
+     "label": "Plan B",
+     "sub": "原方案 · 日场黄鹤楼",
+     "note": "天气转好可按原计划走：11/13 武昌（日场黄鹤楼 + 傍晚轮渡回汉口）+ 11/14 汉阳",
+     "data": "trips/wuhan-2026-11/data-planb.js"
+    }
+   ],
+   "defaultPlan": "A",
    "media": [
     "assets/mp4/all.mp4",
     "assets/mp4/d1.mp4",
@@ -48,7 +66,7 @@
    "counts": {
     "days": 4,
     "food": 15,
-    "shops": 43,
+    "shops": 41,
     "tickets": 9,
     "sights": 19
    },
@@ -63,19 +81,19 @@
      "id": "D2",
      "date": "11/13",
      "weekday": "周五",
-     "title": "武昌：过早 + 省博 + 黄鹤楼 + 轮渡（主力日）"
+     "title": "汉阳：琴台馆（重点）+ 古琴台 + 归元寺 + 晴川阁 + 轮渡双线过江"
     },
     {
      "id": "D3",
      "date": "11/14",
      "weekday": "周六",
-     "title": "汉阳：琴台馆（重点）+ 古琴台 + 归元寺 + 晴川阁 + 汉阳江滩日落"
+     "title": "武昌：过早 + 省博 + 红墙昙华林 + 大桥日落 + 夜游黄鹤楼"
     },
     {
      "id": "D4",
      "date": "11/15",
      "weekday": "周日",
-     "title": "过早 + 伴手礼 + 返程"
+     "title": "返程日：四个版本，当天按状态选一个"
     }
    ]
   }
