@@ -254,9 +254,11 @@ main { padding: 0; }
 .sp-note { color: var(--txt2); }
 .sp-note b { color: var(--txt2); background: rgba(0,0,0,.05); }
 .caret {
-  flex: none; width: 16px; color: var(--txt3); font-size: 11px;
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(20, 30, 45, .06); color: #4a5561;
+  font-size: 16px; line-height: 1; margin-top: 0;
   display: flex; align-items: center; justify-content: center;
-  height: 24px; transition: transform .15s;
+  transition: transform .15s;
 }
 .row.open .caret { transform: rotate(180deg); }
 
