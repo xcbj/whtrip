@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-11-07T07:16:10.717Z",
+ "builtAt": "2026-11-07T08:01:21.878Z",
  "trips": [
   {
    "id": "wuhan-2026-11",
@@ -67,7 +67,7 @@
     "days": 4,
     "food": 15,
     "shops": 41,
-    "tickets": 9,
+    "tickets": 10,
     "sights": 19
    },
    "days": [
