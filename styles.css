@@ -12,6 +12,7 @@
   --pri: #1a73e8;
   --pri-weak: #e8f0fe;
   --warn: #d97706;
+  --crit: #c62828;
   --warn-weak: #fff7e6;
   --ok: #16a34a;
   --ok-weak: #e7f5ec;
@@ -34,6 +35,7 @@
     --pri: #5c9dff;
     --pri-weak: #16273f;
     --warn: #fbbf24;
+    --crit: #ff8a80;
     --warn-weak: #2a2313;
     --ok: #4ade80;
     --ok-weak: #14261a;
@@ -766,3 +768,6 @@ body.mode-home { padding-bottom: calc(var(--safe-b) + 20px); }
 .ver-body { padding: 0 6px 8px; border-top: 1px solid var(--line); }
 .ver-when { font-size: 12.5px; color: var(--txt2); padding: 10px 6px 0; line-height: 1.55; }
 .ver .timeline { margin: 8px 2px 2px; }
+
+/* 硬提示：不可逆/会误事的时间与规则，红字强调 */
+.crit{color:var(--crit,#c62828);font-weight:700}

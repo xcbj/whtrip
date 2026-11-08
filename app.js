@@ -32,6 +32,10 @@
     });
   }
 
+  /* 硬提示标红：md 里用 〔!…!〕 包住的文字 → 红字（写清"不可逆/会误事"的时间与规则） */
+  function crit(s) { return String(s).replace(/〔!([\s\S]+?)!〕/g, '<span class="crit">$1</span>'); }
+  function escC(s) { return crit(esc(s)); }
+
   /* ---------- 资源地址 ---------- */
   function asset(key) { return RES[key] || ((CFG.assetBase || 'assets/') + key); }
 
@@ -153,8 +157,8 @@
       (sp[0] != null ? ' data-t="' + sp[0] + '" data-te="' + sp[1] + '"' : '') + '>' +
       '<div class="row-line"' + (hasDetail ? ' data-toggle="1"' : '') + '>' +
       rail +
-      '<div class="txt"><div class="tt">' + esc(row.title) + '</div>' +
-      (note ? '<div class="nt">' + esc(note) + '</div>' : '') + '</div>';
+      '<div class="txt"><div class="tt">' + escC(row.title) + '</div>' +
+      (note ? '<div class="nt">' + escC(note) + '</div>' : '') + '</div>';
     if (hasDetail) h += '<span class="caret" aria-hidden="true">\u25be</span>';
     h += '</div>';
 
@@ -162,21 +166,21 @@
       h += '<div class="row-detail" hidden>';
       if (spot) {
         h += '<div class="dr spot"><div class="dr-h">看点' +
-          (spot.when ? '<i class="dr-when">' + esc(spot.when) + '</i>' : '') + '</div>';
-        if (spot.look) h += '<div class="sp"><b>看头</b>' + esc(spot.look) + '</div>';
-        if (spot.why) h += '<div class="sp"><b>为什么排它</b>' + esc(spot.why) + '</div>';
-        if (spot.vs) h += '<div class="sp"><b>比同类强在哪</b>' + esc(spot.vs) + '</div>';
-        if (spot.note) h += '<div class="sp sp-note"><b>注意</b>' + esc(spot.note) + '</div>';
+          (spot.when ? '<i class="dr-when">' + escC(spot.when) + '</i>' : '') + '</div>';
+        if (spot.look) h += '<div class="sp"><b>看头</b>' + escC(spot.look) + '</div>';
+        if (spot.why) h += '<div class="sp"><b>为什么排它</b>' + escC(spot.why) + '</div>';
+        if (spot.vs) h += '<div class="sp"><b>比同类强在哪</b>' + escC(spot.vs) + '</div>';
+        if (spot.note) h += '<div class="sp sp-note"><b>注意</b>' + escC(spot.note) + '</div>';
         h += '</div>';
       }
       if (scene) {
-        h += '<div class="dr"><div class="dr-h">首选</div><div class="sc-first">' + esc(scene.first) + '</div></div>';
+        h += '<div class="dr"><div class="dr-h">首选</div><div class="sc-first">' + escC(scene.first) + '</div></div>';
         if (scene.alternatives && scene.alternatives.length) {
           h += '<div class="dr"><div class="dr-h">备选门店（都能搜到全名）</div><div class="chips">' +
-            scene.alternatives.map(function (a) { return '<span class="chip">' + esc(a) + '</span>'; }).join('') +
+            scene.alternatives.map(function (a) { return '<span class="chip">' + escC(a) + '</span>'; }).join('') +
             '</div></div>';
         }
-        if (scene.tip) h += '<div class="dr"><div class="sc-tip">' + esc(scene.tip) + '</div></div>';
+        if (scene.tip) h += '<div class="dr"><div class="sc-tip">' + escC(scene.tip) + '</div></div>';
       }
       if (!nav && scene && scene.first) {
         h += '<div class="dr acts"><button class="btn" data-copy="' + esc(scene.first) + '">复制首选店名</button></div>';
@@ -189,14 +193,14 @@
   /* 短提示直接铺；长的（原方案留档、可选加项、备用安排）折叠起来，标题就是冒号前那半句 */
   function noticeHtml(n) {
     var t = String(n || '');
-    if (t.length <= 90) return '<div class="notice">' + esc(t) + '</div>';
+    if (t.length <= 90) return '<div class="notice">' + escC(t) + '</div>';
     var spare = t.indexOf('原方案留档') === 0 || t.indexOf('留档') > -1;
     var head = t.split('：')[0] || t.slice(0, 18);
     if (head.length > 30) head = head.slice(0, 30) + '…';
     return '<details class="acc' + (spare ? ' spare' : '') + '"><summary>' +
       '<span class="acc-t">' + esc(head) + '</span>' +
       '<span class="hint" style="margin-left:auto;margin-right:6px">' + (spare ? '可切回原版' : '点开') +
-      '</span></summary><div class="acc-body"><p class="long-note">' + esc(t) + '</p></div></details>';
+      '</span></summary><div class="acc-body"><p class="long-note">' + escC(t) + '</p></div></details>';
   }
 
   function changesHtml(list) {
@@ -217,13 +221,13 @@
   function flowHtml(f) {
     if (!f || !f.rows || !f.rows.length) return '';
     var body = f.rows.map(function (r) {
-      return '<div class="flow-row"><span class="fl-time">' + esc(r.time) + '</span>' +
-        '<div class="fl-main"><div class="fl-step">' + esc(r.step) + '</div>' +
-        (r.how ? '<div class="fl-how">' + esc(r.how) + '</div>' : '') + '</div></div>';
+      return '<div class="flow-row"><span class="fl-time">' + escC(r.time) + '</span>' +
+        '<div class="fl-main"><div class="fl-step">' + escC(r.step) + '</div>' +
+        (r.how ? '<div class="fl-how">' + escC(r.how) + '</div>' : '') + '</div></div>';
     }).join('');
     if ((f.notes || []).length) {
       body += f.notes.map(function (t) {
-        return '<p class="long-note" style="margin:12px 0 0">' + esc(t) + '</p>';
+        return '<p class="long-note" style="margin:12px 0 0">' + escC(t) + '</p>';
       }).join('');
     }
     return '<details class="acc flowbox"><summary>' +
@@ -240,12 +244,12 @@
       var lines = v.rows.map(function (r) { return rowHtml(r, n++, seen); }).join('');
       var first = v.rows[0] ? String(v.rows[0].time).split(/[—–]/)[0] : '';
       return '<details class="ver">' +
-        '<summary><span class="ver-k">' + esc(v.key) + '</span>' +
-        '<span class="ver-t">' + esc(v.title) + '</span>' +
-        '<span class="ver-m">' + v.rows.length + ' 步 · ' + esc(first) + ' 起</span>' +
+        '<summary><span class="ver-k">' + escC(v.key) + '</span>' +
+        '<span class="ver-t">' + escC(v.title) + '</span>' +
+        '<span class="ver-m">' + v.rows.length + ' 步 · ' + escC(first) + ' 起</span>' +
         '<span class="caret" aria-hidden="true">\u25be</span></summary>' +
         '<div class="ver-body">' +
-        (v.when ? '<div class="ver-when">' + esc(v.when) + '</div>' : '') +
+        (v.when ? '<div class="ver-when">' + escC(v.when) + '</div>' : '') +
         '<ul class="timeline">' + lines + '</ul></div></details>';
     }).join('') + '</div>';
   }
@@ -260,7 +264,7 @@
       var transit = (d.transit && d.transit.length)
         ? '<details class="acc"><summary>段间交通<span class="hint" style="margin-left:auto;margin-right:8px">' +
           d.transit.length + ' 段</span></summary><div class="acc-body"><ol class="olist">' +
-          d.transit.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol></div></details>'
+          d.transit.map(function (t) { return '<li>' + escC(t) + '</li>'; }).join('') + '</ol></div></details>'
         : '';
 
       var flow = flowHtml(d.flow);
@@ -288,11 +292,11 @@
       ((G.alternatives || []).length ? '<ul class="timeline">' + G.alternatives.map(function (a, i) {
         return '<li class="row"><div class="row-line"><span class="time">方案 ' + (i + 1) + '</span>' +
           '<span class="ico">' + (i === 0 ? '🌧' : i === 1 ? '😮‍💨' : '➕') + '</span>' +
-          '<div class="txt"><div class="tt">' + esc(a.case) + '</div><div class="nt">' + esc(a.plan) + '</div></div></div></li>';
+          '<div class="txt"><div class="tt">' + escC(a.case) + '</div><div class="nt">' + escC(a.plan) + '</div></div></div></li>';
       }).join('') + '</ul>' : '') +
       ((G.rainTransit || []).length ? '<details class="acc"><summary>雨天段间交通<span class="hint" style="margin-left:auto;margin-right:8px">' +
         G.rainTransit.length + ' 段</span></summary><div class="acc-body"><ol class="olist">' +
-        G.rainTransit.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol></div></details>' : '') +
+        G.rainTransit.map(function (t) { return '<li>' + escC(t) + '</li>'; }).join('') + '</ol></div></details>' : '') +
       '</article>';
 
     $('#dayPanels').innerHTML = html;
@@ -301,7 +305,7 @@
   function buildIntro() {
     var body = $('#introBody');
     var list = G.itineraryIntro || [];
-    body.innerHTML = list.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') ||
+    body.innerHTML = list.map(function (p) { return '<p>' + escC(p) + '</p>'; }).join('') ||
       '<p>每天按时间顺序列节点，点一行展开「看点 + 备选门店」；右侧「复制」把地名复制走，粘到任何地图 App 都能搜。</p>';
   }
 
@@ -510,14 +514,14 @@
     return '<div class="tk' + (d ? ' done' : '') + '" data-tk="' + esc(tk.what) + '">' +
       '<button class="tkbox" data-tktoggle="' + esc(tk.what) + '" aria-pressed="' + (d ? 'true' : 'false') + '" aria-label="标记完成">✓</button>' +
       '<div class="tkb">' +
-        '<div class="tkline"><span class="tkname">' + esc(tk.what) + '</span>' +
+        '<div class="tkline"><span class="tkname">' + escC(tk.what) + '</span>' +
           (tk.hot ? '<span class="tkhot">要抢</span>' : '') +
-          '<span class="tkdue ' + u.cls + '">' + esc(u.text) + '</span></div>' +
-        '<div class="tkmeta"><span class="tkm1">参观 ' + esc(tk.day) + '　·　' + esc(tk.channel) + '</span></div>' +
-        '<div class="tkmeta2">' + esc(tk.earliest) + '</div>' +
+          '<span class="tkdue ' + u.cls + '">' + escC(u.text) + '</span></div>' +
+        '<div class="tkmeta"><span class="tkm1">参观 ' + escC(tk.day) + '　·　' + escC(tk.channel) + '</span></div>' +
+        '<div class="tkmeta2">' + escC(tk.earliest) + '</div>' +
         '<details class="tkd"><summary>不去会怎样 / 约不上怎么办</summary>' +
-          '<div class="tkp"><b>缺席：</b>' + esc(tk.miss) + '</div>' +
-          '<div class="tkp"><b>补救：</b>' + esc(tk.fix) + '</div>' +
+          '<div class="tkp"><b>缺席：</b>' + escC(tk.miss) + '</div>' +
+          '<div class="tkp"><b>补救：</b>' + escC(tk.fix) + '</div>' +
         '</details>' +
       '</div></div>';
   }
@@ -568,7 +572,7 @@
     // 一页看懂
     if ((G.onePage || []).length) {
       h += acc('一页看懂', G.onePage.length, '<ol class="olist tight">' + G.onePage.map(function (t) {
-        return '<li>' + esc(t) + '</li>';
+        return '<li>' + escC(t) + '</li>';
       }).join('') + '</ol>', true);
     }
 
@@ -578,10 +582,10 @@
       if ((G.bookings || []).length) {
         inner += '<div class="sec-title" style="margin:0 0 6px">要提前预约 / 买票（' + G.bookings.length + ' 项）</div>';
         inner += G.bookings.map(function (b, i) {
-          return '<div class="item"><div class="item-h">' + idx(i) + '<span class="nm">' + esc(b.what) + '</span></div>' +
-            '<div class="item-b"><span class="lbl">参观：</span>' + esc(b.visitDay) + '　<span class="lbl">最早可约：</span>' + esc(b.earliest) + '</div>' +
-            (b.time ? '<div class="item-b"><span class="lbl">放票：</span>' + esc(b.time) + '</div>' : '') +
-            (b.channel ? '<div class="item-b"><span class="lbl">渠道：</span>' + esc(b.channel) + '</div>' : '') +
+          return '<div class="item"><div class="item-h">' + idx(i) + '<span class="nm">' + escC(b.what) + '</span></div>' +
+            '<div class="item-b"><span class="lbl">参观：</span>' + escC(b.visitDay) + '　<span class="lbl">最早可约：</span>' + escC(b.earliest) + '</div>' +
+            (b.time ? '<div class="item-b"><span class="lbl">放票：</span>' + escC(b.time) + '</div>' : '') +
+            (b.channel ? '<div class="item-b"><span class="lbl">渠道：</span>' + escC(b.channel) + '</div>' : '') +
             '</div>';
         }).join('');
       }
@@ -618,11 +622,11 @@
       var inner2 = '';
       if ((G.clothing || []).length) {
         inner2 += '<div class="sec-title" style="margin:0 0 6px">穿什么</div><ul class="olist">' +
-          G.clothing.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+          G.clothing.map(function (t) { return '<li>' + escC(t) + '</li>'; }).join('') + '</ul>';
       }
       if ((G.meds || []).length) {
         inner2 += '<div class="sec-title" style="margin:14px 0 6px">带什么药</div><ul class="olist">' +
-          G.meds.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+          G.meds.map(function (t) { return '<li>' + escC(t) + '</li>'; }).join('') + '</ul>';
       }
       h += acc('穿衣 · 药品', (G.clothing || []).length + (G.meds || []).length, inner2);
     }
@@ -659,11 +663,11 @@
     // 突发情况
     if ((G.alternatives || []).length) {
       var inner5 = '<ul class="olist">' + G.alternatives.map(function (a) {
-        return '<li><b>' + esc(a.case) + '</b>：' + esc(a.plan) + '</li>';
+        return '<li><b>' + escC(a.case) + '</b>：' + escC(a.plan) + '</li>';
       }).join('') + '</ul>';
       if ((G.rainTransit || []).length) {
         inner5 += '<div class="sec-title" style="margin:12px 0 6px">雨天怎么走</div><ul class="olist">' +
-          G.rainTransit.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+          G.rainTransit.map(function (t) { return '<li>' + escC(t) + '</li>'; }).join('') + '</ul>';
       }
       h += acc('下雨 / 累了 / 想加点 · 换方案', G.alternatives.length, inner5);
     }
@@ -712,7 +716,7 @@
       (meta.builtAt ? ' · 生成于 ' + esc(String(meta.builtAt).slice(0, 10)) : '') + '</p>';
 
     if ((G.onePage || []).length) {
-      h += '<h2>一页看懂</h2><ul>' + G.onePage.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+      h += '<h2>一页看懂</h2><ul>' + G.onePage.map(function (t) { return '<li>' + escC(t) + '</li>'; }).join('') + '</ul>';
     }
 
     (G.days || []).forEach(function (d) {
@@ -775,7 +779,7 @@
     if ((G.rainTransit || []).length) { qk += '<h3>雨天怎么走</h3>' + plist(G.rainTransit); }
     if ((G.alternatives || []).length) {
       qk += '<h3>换方案</h3>' + G.alternatives.map(function (a) {
-        return '<div class="pr-row"><b>' + esc(a.case) + '</b>：' + esc(a.plan) + '</div>';
+        return '<div class="pr-row"><b>' + escC(a.case) + '</b>：' + escC(a.plan) + '</div>';
       }).join('');
     }
     if (qk) { h += '<h2>速查</h2>' + qk; }
